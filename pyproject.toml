@@ -41,6 +41,7 @@ dependencies = [
 ]
 
 [project.urls]
+https://github.com/NJU-LHRS/LHRS-Bot
 
 [tool.setuptools.packages.find]
 exclude = ["Config*", "Script*", "assets*", "examples.*",]
