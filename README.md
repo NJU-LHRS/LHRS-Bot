@@ -30,9 +30,10 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
 <img src=assets/performance.png width="50%">
 </div>
   <div align="center">
-<img src=assets/vis_example.pdf width="100%">
+<img src=assets/vis_example.png width="100%">
 </div>
 </figure>
+
 
 
 
