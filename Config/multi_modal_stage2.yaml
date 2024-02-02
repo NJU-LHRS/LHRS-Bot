@@ -1,0 +1,106 @@
+# Control
+alignment_dim: 768
+adjust_norm: False
+generate: False
+prompt_template: "llava_llama_2"
+stage: 2
+weight_sample: False
+
+# Tune Parameter
+tune_im_start: False
+tune_im_patch: False
+tune_rgb_bk: False
+tune_rgb_pooler: True  # True for stage2
+
+rgb_vision:
+  arch: vit_large 
+  vit_name: openai/clip-vit-large-patch14  # if use vit, choice the pre-trained model source
+  input_size: [224, 224]
+  patch_dropout: 0.
+  input_patchnorm: False
+  tune_pooler: True
+  attn_pooler:
+    num_query: 144
+    num_attn_heads: 16
+    num_layers: 6
+text:
+  # llama-v2 config
+  vocab_size: 32000
+  hidden_size: 4096
+  intermediate_size: 11008
+  num_hidden_layers: 32
+  num_attention_heads: 32
+  hidden_act: "silu"
+  max_position_embeddings: 2048
+  initializer_range: 0.02
+  rms_norm_eps: 1e-5
+  use_cache: True
+  pad_token_id: 0
+  bos_token_id: 1
+  eos_token_id: 2
+  tie_word_embeddings: False
+  path: meta-llama/Llama-2-7b-chat-hf
+sar_vision:
+  arch: base
+  input_size: [192, 192]
+  n_queries: 256
+  in_chans: 2
+  # decoder Parameter
+  decoder:
+    layers: 12
+    heads: 12
+    mask_ratio: 0.6
+    mask_color: mean
+    hidden_size: 768
+  # loss Parameter
+  loss_weight: 1.0
+  reduction: none
+  activate: sigmoid
+  alpha: 0.2
+  focal_gamma: 1.0
+  residual: False
+  unmask_weight: 0.0
+  # DINO Contrastive Learning Parameter
+  online_temp: 0.1
+  branch_temp: 0.07
+  warmup_branch_temp: 0.04
+  warmup_branch_temp_epochs: 2
+transform:
+  input_size: [224, 224]
+  rand_aug: rand-m5-n2-mstd0.5-inc1
+eval:
+  dataset: AID
+
+# training config
+dtype: float16
+bits: 8
+double_quant: True
+quant_type: nf4
+fp16: True
+bf16: False
+lora:
+  enable: True  # True for stage 2
+  lora_r: 128
+  lora_alpha: 256
+  lora_dropout: 0.05
+  lora_bias: none
+
+# optimizer
+optimizer: adamw
+lr: 0.0002
+wd: 0.
+epochs: 1
+max_grad_norm: 1.0
+betas: [0.9, 0.95]
+
+# scheduler
+schedule:
+  name: cosine
+  min_lr: 0.00008
+  warmup_epochs: 100
+  warmup_method: linear
+  warmup_factor: 0.01
+  decay_epochs: 30
+  decay_rate: 0.1
+  multisteps: []
+  gamma: 0.1

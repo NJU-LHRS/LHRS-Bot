@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lhrs"
+version = "0.1.0"
+description = "MLLM for RS"
+readme = "README.md"
+requires-python = ">=3.8"
+
+dependencies = [
+    "wandb", 
+    "torch==2.1.2", 
+    "torchvision==0.16.2", 
+    "transformers==4.36.1",
+    "timm==0.9.12", 
+    "torchmetrics==1.1.2", 
+    "thop", 
+    "mmcv==2.1.0", 
+    "mmengine==0.10.1", 
+    "ml-collections",
+    "peft==0.7.1", 
+    "gradio==3.47.1", 
+    "numpy", 
+    "scikit-learn==1.3.2", 
+    "sentencepiece==0.1.99", 
+    "tensorboard", 
+    "tokenizers==0.15.0",
+    "accelerate==0.25.0", 
+    "albumentations", 
+    "bitsandbytes==0.41.3", 
+    "deepspeed", 
+    "datasets",
+    "webdataset",
+    "geopandas",
+    "tabulate",
+    "pycocotools",
+    "pycocoevalcap",
+    "braceexpand",
+]
+
+[project.urls]
+
+[tool.setuptools.packages.find]
+exclude = ["Config*", "Script*", "assets*", "examples.*",]
+
+[tool.wheel]
+exclude = ["Config*", "Script*", "assets*", "examples.*",]
