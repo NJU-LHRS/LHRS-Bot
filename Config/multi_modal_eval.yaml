@@ -80,8 +80,8 @@ fp16: False
 bf16: True
 lora:
   enable: False  # True for stage 2
-  lora_r: 8
-  lora_alpha: 16
+  lora_r: 128
+  lora_alpha: 256
   lora_dropout: 0.05
   lora_bias: none
 
