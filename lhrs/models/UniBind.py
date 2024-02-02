@@ -70,7 +70,7 @@ class UniBind(nn.Module):
         rgb_ckpt = get_rgb_maybe_zero_3(fp32_ckpt.items())
         other_ckpt = get_other_maybe_zero_3(fp32_ckpt.items())
 
-        if self.stage == 2:
+        if self.stage >= 2:
             file_name = pathlib.Path(file_name)
             if file_name.is_file():
                 loar_output_path = file_name.parent / "TextLoRA"
