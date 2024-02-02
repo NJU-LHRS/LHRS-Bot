@@ -1,7 +1,8 @@
 <h1 align="center"> LHRS-Bot: Empowering Remote Sensing with VGI-Enhanced Large Multimodal Language Model </h1> 
 
 <h5 align="center"><em>Dilxat Muhtar*, Zhenshi Li* , Feng Gu, Langxing Heyang, Xueliang Zhang, and Pengfeng Xiao</em>
-  (*Equal Contribution)</h5>
+</br>(*Equal Contribution)</h5>
+
 
 <figure>
 <div align="center">
@@ -126,23 +127,23 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
 
     ~~~shell
     python lhrs_webui.py \
-    			 -c Config/multi_modal_eval.yaml \           # config file
-    			 --checkpoint-path ${PathToCheckpoint}.pt \  # path to checkpoint end with .pt
-    			 --server-port 8000 \                        # change if you need
-    			 --server-name 127.0.0.1 \                   # change if you need
-    			 --share                                     # if you want to share with other
+         -c Config/multi_modal_eval.yaml \           # config file
+         --checkpoint-path ${PathToCheckpoint}.pt \  # path to checkpoint end with .pt
+         --server-port 8000 \                        # change if you need
+         --server-name 127.0.0.1 \                   # change if you need
+         --share                                     # if you want to share with other
     ~~~
 
 + Command line demo:
 
   ~~~shell
   python cli_qa.py \
-         -c Config/multi_modal_eval.yaml \                 # config file
-         --model-path ${PathToCheckpoint}.pt \             # path to checkpoint end with .pt
-         --image-file ${TheImagePathYouWantToChat} \       # path to image file (Only Single Image File is supported)
-         --accelerator "gpu" \                             # change if you need ["mps", "cpu", "gpu"]
-         --temperature 0.4 \
-         --max-new-tokens 512
+       -c Config/multi_modal_eval.yaml \                 # config file
+       --model-path ${PathToCheckpoint}.pt \             # path to checkpoint end with .pt
+       --image-file ${TheImagePathYouWantToChat} \       # path to image file (Only Single Image File is supported)
+       --accelerator "gpu" \                             # change if you need ["mps", "cpu", "gpu"]
+       --temperature 0.4 \
+       --max-new-tokens 512
   ~~~
 
 
