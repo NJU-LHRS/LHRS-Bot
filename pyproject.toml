@@ -38,6 +38,8 @@ dependencies = [
     "pycocotools",
     "pycocoevalcap",
     "braceexpand",
+	"black",
+	"isort",
 ]
 
 [project.urls]
@@ -50,3 +52,22 @@ exclude = ["Config*", "Script*", "assets*", "examples.*",]
 exclude = ["Config*", "Script*", "assets*", "examples.*",]
 
 license = { file = "LICENSE" }
+
+[tool.black]
+line-length = 115
+include = '\.pyi?$'
+exclude = '''
+(
+      __pycache__
+    | \.git
+    | \.mypy_cache
+    | \.pytest_cache
+    | \.vscode
+    | \.venv
+    | inference/
+)
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
