@@ -1,7 +1,8 @@
 <h1 align="center"> LHRS-Bot: Empowering Remote Sensing with VGI-Enhanced Large Multimodal Language Model </h1> 
 
-<h5 align="center"><em>Dilxat Muhtar*, Zhenshi Li* , Feng Gu, Langxing Heyang, Xueliang Zhang, and Pengfeng Xiao</em>
+<h5 align="center"><em>Dilxat Muhtar*, Zhenshi Li* , Feng Gu, Xueliang Zhang, and Pengfeng Xiao</em>
 </br>(*Equal Contribution)</h5>
+
 
 
 <figure>
@@ -12,10 +13,11 @@
   <a href="#news">News</a> |
   <a href="#introduction">Introduction</a> |
   <a href="#Preparation">Preparation</a> |
-  <a href="#Demo">Demo</a>|
+  <a href="#Demo">Demo</a>| 
   <a href="#acknowledgement">Acknowledgement</a> |
   <a href="#statement">Statement</a>
 </p >
+
 
 ## News
 
