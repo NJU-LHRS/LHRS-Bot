@@ -21,7 +21,7 @@
 
 ## News
 
-+ **\[Feb 6 2024\]:** Our paper us available at [arxiv](https://arxiv.org/abs/2402.02544).
++ **\[Feb 6 2024\]:** Our paper now is available at [arxiv](https://arxiv.org/abs/2402.02544).
 + **\[Feb 2 2024\]:** We are excited to announce the release of our code and model checkpoint! Our dataset and training recipe will be update soon!
 
 ## Introduction
