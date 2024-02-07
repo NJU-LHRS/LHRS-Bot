@@ -4,7 +4,6 @@
 </br>(*Equal Contribution)</h5>
 
 
-
 <figure>
 <div align="center">
 <img src=https://pumpkintypora.oss-cn-shanghai.aliyuncs.com/lhrsbot.png width="20%">
@@ -13,14 +12,16 @@
   <a href="#news">News</a> |
   <a href="#introduction">Introduction</a> |
   <a href="#Preparation">Preparation</a> |
-  <a href="#Demo">Demo</a>| 
+  <a href="#Demo">Demo</a> | 
   <a href="#acknowledgement">Acknowledgement</a> |
   <a href="#statement">Statement</a>
 </p >
 
 
+
 ## News
 
++ **\[Feb 7 2024\]:** Model weights are now available on both Google Drive and Baidu Disk.
 + **\[Feb 6 2024\]:** Our paper now is available at [arxiv](https://arxiv.org/abs/2402.02544).
 + **\[Feb 2 2024\]:** We are excited to announce the release of our code and model checkpoint! Our dataset and training recipe will be update soon!
 
@@ -95,7 +96,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
                 ...
                 text:
                 	...
-                  path: ""  # TODO: Directed to your directory
+                  path: ""  # TODO: Direct to your directory
                 ...
                 ~~~
 
@@ -105,7 +106,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
                 ...
                 text:
                 	...
-                  path: ""  # TODO: Directed to your directory
+                  path: ""  # TODO: Direct to your directory
                 ...
                 ~~~
 
@@ -113,7 +114,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
 
 	|                            Staeg1                            |                            Stage2                            |                            Stage3                            |
 	| :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: |
-	| [Baidu Disk](https://pan.baidu.com/s/1CYjUgGSvdchTuGtxUFNkGA?pwd=sgi7) | [Baidu Disk](https://pan.baidu.com/s/1WYCVPqbizowvLyNGWx9mIw?pwd=986f) | [Baidu Disk](https://pan.baidu.com/s/1n1h_ZImeKTgvoNHjr5bq3Q?pwd=qhqw) |
+	| [Baidu Disk](https://pan.baidu.com/s/1CYjUgGSvdchTuGtxUFNkGA?pwd=sgi7), [Google Drive](https://drive.google.com/drive/folders/1LYrKJ_SpsNQEFTuo6N3rc-TLyaWb4d1Y?usp=drive_link) | [Baidu Disk](https://pan.baidu.com/s/1WYCVPqbizowvLyNGWx9mIw?pwd=986f), [Google Drive](https://drive.google.com/drive/folders/1ZPwkxvapEtvPoEdjKfvOe3j0SqpQeAu5?usp=drive_link) | [Baidu Disk](https://pan.baidu.com/s/1n1h_ZImeKTgvoNHjr5bq3Q?pwd=qhqw), [Google Drive](https://drive.google.com/drive/folders/1dzWTE1k935MjMVnfLtTJiIqw7yCj-e3m?usp=drive_link) |
 	
 	+ ⚠️ Ensure that the `TextLoRA` folder is located in the same directory as `FINAL.pt`. The name `TextLoRA` should remain unchanged. Our framework will automatically detect the version perceiver checkpoint and, if possible, load and merge the LoRA module.
 	
@@ -123,7 +124,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
 	    
 	    |                         Development                          |
 	    | :----------------------------------------------------------: |
-	    | [Baidu Disk](https://pan.baidu.com/s/134VYRigS4f9TuMk7ekoZbg?pwd=dxk4) |
+	    | [Baidu Disk](https://pan.baidu.com/s/134VYRigS4f9TuMk7ekoZbg?pwd=dxk4), [Google Drive](https://drive.google.com/drive/folders/1UPJXGvFsrt-OSI732AaAzsD_FPNJOBK3?usp=drive_link) |
 
 ## Demo
 
@@ -162,5 +163,15 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
 
 ## Statement
 
-+ If you find our work is useful, please give us 🌟 in GitHub.
++ If you find our work is useful, please give us 🌟 in GitHub and consider cite our paper:
+
+    ~~~tex
+    @misc{2402.02544,
+    Author = {Dilxat Muhtar and Zhenshi Li and Feng Gu and Xueliang Zhang and Pengfeng Xiao},
+    Title = {LHRS-Bot: Empowering Remote Sensing with VGI-Enhanced Large Multimodal Language Model},
+    Year = {2024},
+    Eprint = {arXiv:2402.02544},
+    }
+    ~~~
+
 + Licence: Apache
