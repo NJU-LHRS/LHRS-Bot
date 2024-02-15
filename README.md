@@ -49,7 +49,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
 
     ~~~shell
     git clone git@github.com:NJU-LHRS/LHRS-Bot.git
-    cd LHRS-Bit
+    cd LHRS-Bot
     ~~~
 
 2. Create a new virtual enviroment
