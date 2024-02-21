@@ -21,6 +21,7 @@
 
 ## News
 
++ **\[Feb 21 2024\]:** We have updated our evaluation code. Any advice are welcom!
 + **\[Feb 7 2024\]:** Model weights are now available on both Google Drive and Baidu Disk.
 + **\[Feb 6 2024\]:** Our paper now is available at [arxiv](https://arxiv.org/abs/2402.02544).
 + **\[Feb 2 2024\]:** We are excited to announce the release of our code and model checkpoint! Our dataset and training recipe will be update soon!
@@ -151,7 +152,54 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
        --max-new-tokens 512
   ~~~
 
++ Inference:
 
+    + Classification
+
+        ~~~shell
+        python main_cls.py \
+             -c Config/multi_modal_eval.yaml \                 # config file
+             --model-path ${PathToCheckpoint}.pt \             # path to checkpoint end with .pt
+             --data-path ${ImageFolder} \                      # path to classification image folder
+             --accelerator "gpu" \                             # change if you need ["mps", "cpu", "gpu"]
+             --workers 4 \
+             --enabl-amp True \
+             --output ${YourOutputDir}                         # Path to output (result, metric etc.)
+             --batch-size 8 \
+        ~~~
+
+    + Visual Grounding
+
+        ~~~shell
+        python main_vg.py \
+             -c Config/multi_modal_eval.yaml \                 # config file
+             --model-path ${PathToCheckpoint}.pt \             # path to checkpoint end with .pt
+             --data-path ${ImageFolder} \                      # path to image folder
+             --accelerator "gpu" \                             # change if you need ["mps", "cpu", "gpu"]
+             --workers 2 \
+             --enabl-amp True \
+             --output ${YourOutputDir}                         # Path to output (result, metric etc.)
+             --batch-size 1 \                                  # It's better to use batchsize 1, since we find batch inference
+             --data-target ${ParsedLabelJsonPath}              # is not stable.
+        ~~~
+
+    + Visual Question Answering
+
+        ~~~shell
+        python main_vqa.py \
+             -c Config/multi_modal_eval.yaml \                 # config file
+             --model-path ${PathToCheckpoint}.pt \             # path to checkpoint end with .pt
+             --data-path ${Image} \                            # path to image folder
+             --accelerator "gpu" \                             # change if you need ["mps", "cpu", "gpu"]
+             --workers 2 \
+             --enabl-amp True \
+             --output ${YourOutputDir}                         # Path to output (result, metric etc.)
+             --batch-size 1 \                                  # It's better to use batchsize 1, since we find batch inference
+             --data-target ${ParsedLabelJsonPath}              # is not stable.
+             --data-type "HR"                                  # choose from ["HR", "LR"]
+        ~~~
+
+        
 
 ## Acknowledgement
 
