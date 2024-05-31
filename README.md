@@ -163,7 +163,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
              --data-path ${ImageFolder} \                      # path to classification image folder
              --accelerator "gpu" \                             # change if you need ["mps", "cpu", "gpu"]
              --workers 4 \
-             --enabl-amp True \
+             --enable-amp True \
              --output ${YourOutputDir}                         # Path to output (result, metric etc.)
              --batch-size 8 \
         ~~~
@@ -177,7 +177,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
              --data-path ${ImageFolder} \                      # path to image folder
              --accelerator "gpu" \                             # change if you need ["mps", "cpu", "gpu"]
              --workers 2 \
-             --enabl-amp True \
+             --enable-amp True \
              --output ${YourOutputDir}                         # Path to output (result, metric etc.)
              --batch-size 1 \                                  # It's better to use batchsize 1, since we find batch inference
              --data-target ${ParsedLabelJsonPath}              # is not stable.
@@ -192,7 +192,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
              --data-path ${Image} \                            # path to image folder
              --accelerator "gpu" \                             # change if you need ["mps", "cpu", "gpu"]
              --workers 2 \
-             --enabl-amp True \
+             --enable-amp True \
              --output ${YourOutputDir}                         # Path to output (result, metric etc.)
              --batch-size 1 \                                  # It's better to use batchsize 1, since we find batch inference
              --data-target ${ParsedLabelJsonPath}              # is not stable.
