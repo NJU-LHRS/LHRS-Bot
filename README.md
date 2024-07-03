@@ -12,6 +12,7 @@
   <a href="#news">News</a> |
   <a href="#introduction">Introduction</a> |
   <a href="#Preparation">Preparation</a> |
+  <a href="#Training">Training</a> |
   <a href="#Demo">Demo</a> | 
   <a href="#acknowledgement">Acknowledgement</a> |
   <a href="#statement">Statement</a>
@@ -20,7 +21,7 @@
 
 
 ## News
-
++ **\[Ju2 02 2024\]:** Our paper has been accepted by ECCV 2024! We have open-sourced our training script and training data. Please follow the training instruction belown and [data preparation](./DataPrepare/README.md).
 + **\[Feb 21 2024\]:** We have updated our evaluation code. Any advice are welcom!
 + **\[Feb 7 2024\]:** Model weights are now available on both Google Drive and Baidu Disk.
 + **\[Feb 6 2024\]:** Our paper now is available at [arxiv](https://arxiv.org/abs/2402.02544).
@@ -127,6 +128,21 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
 	    | :----------------------------------------------------------: |
 	    | [Baidu Disk](https://pan.baidu.com/s/134VYRigS4f9TuMk7ekoZbg?pwd=dxk4), [Google Drive](https://drive.google.com/drive/folders/1UPJXGvFsrt-OSI732AaAzsD_FPNJOBK3?usp=drive_link) |
 
+## Training
++ Prepare and reformat your data following the instruction from [here](./DataPrepare/README.md).
++ Stage1
+
+	+ Fill the `OUTPUT_DIR` and `DATA_DIR` of [script1](./Script/train_stage1.sh).
+	+ `cd Script; bash train_stage1.sh`
+
++ Stage2
+
+	+ Fill the `OUTPUT_DIR` and `DATA_DIR` of [script1](./Script/train_stage2.sh)
+	+ Fill the `MODEL_PATH` for loading the stage1' checkpoint 
+	+ `cd Script; bash train_stage2.sh`
+
++ Stage3 is same as Stage2 except for different folder and script ([here](./Script/train_stage3.sh)).
+
 ## Demo
 
 + Online Web UI demo with gradio:
@@ -163,7 +179,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
              --data-path ${ImageFolder} \                      # path to classification image folder
              --accelerator "gpu" \                             # change if you need ["mps", "cpu", "gpu"]
              --workers 4 \
-             --enable-amp True \
+             --enabl-amp True \
              --output ${YourOutputDir}                         # Path to output (result, metric etc.)
              --batch-size 8 \
         ~~~
@@ -177,7 +193,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
              --data-path ${ImageFolder} \                      # path to image folder
              --accelerator "gpu" \                             # change if you need ["mps", "cpu", "gpu"]
              --workers 2 \
-             --enable-amp True \
+             --enabl-amp True \
              --output ${YourOutputDir}                         # Path to output (result, metric etc.)
              --batch-size 1 \                                  # It's better to use batchsize 1, since we find batch inference
              --data-target ${ParsedLabelJsonPath}              # is not stable.
@@ -192,7 +208,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
              --data-path ${Image} \                            # path to image folder
              --accelerator "gpu" \                             # change if you need ["mps", "cpu", "gpu"]
              --workers 2 \
-             --enable-amp True \
+             --enabl-amp True \
              --output ${YourOutputDir}                         # Path to output (result, metric etc.)
              --batch-size 1 \                                  # It's better to use batchsize 1, since we find batch inference
              --data-target ${ParsedLabelJsonPath}              # is not stable.
