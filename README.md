@@ -21,8 +21,8 @@
 
 
 ## News
-+ **\[Ju2 02 2024\]:** Our paper has been accepted by ECCV 2024! We have open-sourced our training script and training data. Please follow the training instruction belown and [data preparation](./DataPrepare/README.md).
-+ **\[Feb 21 2024\]:** We have updated our evaluation code. Any advice are welcom!
++ **\[Jul 02 2024\]:** Our paper has been accepted by ECCV 2024! We have open-sourced our training script and training data. Please follow the training instruction below and [data preparation](./DataPrepare/README.md).
++ **\[Feb 21 2024\]:** We have updated our evaluation code. Any advices are welcomed!
 + **\[Feb 7 2024\]:** Model weights are now available on both Google Drive and Baidu Disk.
 + **\[Feb 6 2024\]:** Our paper now is available at [arxiv](https://arxiv.org/abs/2402.02544).
 + **\[Feb 2 2024\]:** We are excited to announce the release of our code and model checkpoint! Our dataset and training recipe will be update soon!
