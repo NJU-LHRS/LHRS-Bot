@@ -21,6 +21,7 @@
 
 
 ## News
++ **\[Ju2 09 2024\]:** We have released our evaluation benchmark [LHRS-Bench](https://huggingface.co/datasets/PumpkinCat/LHRS_Data/tree/main/LHRS-Bench).
 + **\[Ju2 02 2024\]:** Our paper has been accepted by ECCV 2024! We have open-sourced our training script and training data. Please follow the training instruction belown and [data preparation](./DataPrepare/README.md).
 + **\[Feb 21 2024\]:** We have updated our evaluation code. Any advice are welcom!
 + **\[Feb 7 2024\]:** Model weights are now available on both Google Drive and Baidu Disk.
