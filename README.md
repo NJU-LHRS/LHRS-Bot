@@ -23,7 +23,7 @@
 ## News
 + **\[Jul 12 2024\]:** We post the missing part in our paper (some observations, considerations, and lessons) in [Zhihu](https://zhuanlan.zhihu.com/p/708415355) (In Chinese, please contact us if you need English version).
 + **\[Jul 09 2024\]:** We have released our evaluation benchmark [LHRS-Bench](https://huggingface.co/datasets/PumpkinCat/LHRS_Data/tree/main/LHRS-Bench).
-+ **\[Ju2 02 2024\]:** Our paper has been accepted by ECCV 2024! We have open-sourced our training script and training data. Please follow the training instruction belown and [data preparation](./DataPrepare/README.md).
++ **\[Jul 02 2024\]:** Our paper has been accepted by ECCV 2024! We have open-sourced our training script and training data. Please follow the training instruction belown and [data preparation](./DataPrepare/README.md).
 + **\[Feb 21 2024\]:** We have updated our evaluation code. Any advice are welcom!
 + **\[Feb 7 2024\]:** Model weights are now available on both Google Drive and Baidu Disk.
 + **\[Feb 6 2024\]:** Our paper now is available at [arxiv](https://arxiv.org/abs/2402.02544).
