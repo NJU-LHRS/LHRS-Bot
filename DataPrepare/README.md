@@ -1,6 +1,4 @@
 # Notice
-⚠️Please note that, according to the license of Google Earth, we cannot redistribute the raw image data source.
-
 We recommend users download the image using the provided coordinates from the Google Earth API. Typically, each image is organized with the following naming format:
 
 ```
