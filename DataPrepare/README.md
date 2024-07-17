@@ -14,7 +14,7 @@ Country_Id_City_ULLon_ULLat_LRLon_LRLat.jpg
 
 ```
 
-⚠️ Moreover, consider different datasets have their own licence, we recommand user to download from the data following data source:
+⚠️ We recommand user to download from the data following data source:
 + RSVQA: [source](https://rsvqa.sylvainlobry.com/)
 + NWPU: [source](https://huggingface.co/datasets/timm/resisc45)
 + RSICD: [source](https://github.com/201528014227051/RSICD_optimal?tab=readme-ov-file)
