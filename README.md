@@ -89,7 +89,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
 
     + Mannually download:
 
-        + Download all the files from [HuggingFace](https://huggingface.co/meta-llama/Llama-2-7b-hf).
+        + Download all the files from [HuggingFace](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf).
 
         + Change the following line of each file to your downloaded directory:
 
