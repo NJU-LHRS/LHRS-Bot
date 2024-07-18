@@ -76,7 +76,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
 
         Our framework is designed to automatically download the checkpoint when you initiate training or run a demo. However, there are a few preparatory steps you need to complete:
 
-        1. Request the LLaMA2-7B models from [Meta website](https://llama.meta.com/llama-downloads/).
+        1. Request the LLaMA2-7B-Chat models from [Hugging Face](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf/tree/main).
 
         2. After your request been processed, login to huggingface using your personal access tokens:
 
