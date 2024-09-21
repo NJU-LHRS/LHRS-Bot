@@ -23,7 +23,7 @@ from lhrs.Dataset import RSVQAHR, RSVQALR, DataCollatorForVQASupervisedDataset
 from lhrs.models import build_model
 from lhrs.utils import type_dict
 from tqdm import tqdm
-from transformers import CLIPImageProcessor
+from transformers import SiglipImageProcessor
 
 logger = logging.getLogger("train")
 
@@ -132,14 +132,14 @@ def main(config: ml_collections.ConfigDict):
     dtype = type_dict[config.dtype]
     model.to(dtype)
 
-    vis_transform = CLIPImageProcessor.from_pretrained("openai/clip-vit-large-patch14")
+    vis_transform = SiglipImageProcessor.from_pretrained(config.rgb_vision.vit_name)
     if config.data_type == "HR":
         dataset = RSVQAHR(
             root=config.data_target,
             image_root=config.data_path,
             image_transform=vis_transform,
             split="test",
-            token_prefix="<image>[VQA] ",
+            token_prefix="<image>[CONSIZE] ",
             prompt_type=config.prompt_template,
             tokenizer=model.text.tokenizer,
         )
@@ -149,7 +149,7 @@ def main(config: ml_collections.ConfigDict):
             image_root=config.data_path,
             image_transform=vis_transform,
             split="test",
-            token_prefix="<image>[VQA] ",
+            token_prefix="<image>[CONSIZE] ",
             prompt_type=config.prompt_template,
             tokenizer=model.text.tokenizer,
         )
@@ -470,7 +470,9 @@ class TextVQAAccuracyEvaluator:
             unique_answer_scores = self._compute_answer_scores(entry["target"])
             score = unique_answer_scores.get(pred_answer, 0.0)
             if score == 0.0:
-                if pred_answer in entry["target"]:
+                if pred_answer.lower() in entry["target"].lower():
+                    score = 1.0
+                elif entry["target"].lower() in pred_answer.lower():
                     score = 1.0
             pred_scores.append(score)
             diff_type_score[entry["types"]].append(score)

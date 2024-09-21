@@ -16,7 +16,7 @@ import transformers
 import webdataset as wds
 from PIL import Image
 from torch.utils.data import get_worker_info
-from transformers import CLIPImageProcessor
+from transformers import BaseImageProcessor
 from webdataset.filters import _shuffle
 from webdataset.tariterators import (
     base_plus_ext,
@@ -146,7 +146,10 @@ class CaptionDataset(torch.utils.data.Dataset):
                             img_path = self.img_dir[i] / country / city / (name + ".jpg")
                             if valid_path(img_path):
                                 self.img_list.append(img_path)
-                                self.cap_list.append(item["cap"])
+                                if "caption" in item.keys():
+                                    self.cap_list.append(item["caption"])
+                                else:
+                                    self.cap_list.append(item["cap"])
             elif "LLAVA" in self.img_dir[i].stem:
                 data = data["data"]
                 for item in data:
@@ -154,6 +157,13 @@ class CaptionDataset(torch.utils.data.Dataset):
                     if valid_path(image_path):
                         self.img_list.append(image_path)
                         self.cap_list.append(item["conv"])
+            elif "DOTA" in self.img_dir[i].stem or "FAST" in self.img_dir[i].stem:
+                for item in data:
+                    image = item["image"]
+                    img_path = self.img_dir[i] / image
+                    if valid_path(img_path):
+                        self.img_list.append(img_path)
+                        self.cap_list.append(item["cap"])
             else:
                 for j in range(len(data["images"])):
                     img_path = self.img_dir[i] / data["images"][j]["filename"]
@@ -165,9 +175,14 @@ class CaptionDataset(torch.utils.data.Dataset):
         return len(self.cap_list)
 
     def load_image(self, idx: int):
-        x = Image.open(self.img_list[idx]).convert("RGB")
+        try:
+            x = Image.open(self.img_list[idx]).convert("RGB")
+        except Exception as e:
+            logger.error(f"Error loading image {self.img_list[idx]}: {e}")
+            x = Image.new("RGB", (224, 224))
+
         if self.transform is not None:
-            if isinstance(self.transform, CLIPImageProcessor):
+            if isinstance(self.transform, BaseImageProcessor):
                 x = self.transform(x, return_tensors="pt").pixel_values.squeeze()
             else:
                 x = self.transform(x)
@@ -192,7 +207,7 @@ class VGEvalDataset(CaptionDataset):
         tokenizer: transformers.PreTrainedTokenizer = None,
         **kwargs,
     ):
-        prompt_type = kwargs.pop("prompt_type", "llava_llama_2")
+        prompt_type = kwargs.pop("prompt_type", "llama3")
         conversation_lib.default_conversation = conversation_lib.conv_templates[prompt_type]
 
         if isinstance(root, str):
@@ -222,10 +237,10 @@ class VGEvalDataset(CaptionDataset):
         for item in data:
             if dataset_name.endswith("RSVG_test"):
                 img_path = self.img_dir / item["img"]
-                item["conv"] = dict(Question=item["question"], Answer=None)
+                item["conv"] = dict(Question=item["question"].replace("[VG]", "[DET]"), Answer=None)
             elif dataset_name.endswith("DIOR_test"):
                 img_path = self.img_dir / (item["img"] + ".jpg")
-                item["conv"] = dict(Question=item["question"], Answer=None)
+                item["conv"] = dict(Question=item["question"].replace("[VG]", "[DET]"), Answer=None)
             else:
                 img_path = self.img_dir / item["name"]
 
@@ -415,9 +430,9 @@ class InstructDataset(CaptionDataset):
             # remove other DEFAULT_IMAGE_TOKEN
             length = len(item)
             for j in range(1, length):
-                if DEFAULT_IMAGE_TOKEN in item[j]["Question"]:
+                while DEFAULT_IMAGE_TOKEN in item[j]["Question"]:
                     item[j]["Question"] = item[j]["Question"].replace(DEFAULT_IMAGE_TOKEN, "")
-                if DEFAULT_IMAGE_TOKEN in item[j]["Answer"]:
+                while DEFAULT_IMAGE_TOKEN in item[j]["Answer"]:
                     item[j]["Answer"] = item[j]["Answer"].replace(DEFAULT_IMAGE_TOKEN, "")
 
             new_cap_list.append(item)
@@ -425,6 +440,13 @@ class InstructDataset(CaptionDataset):
 
         self.cap_list = new_cap_list
         self.img_list = new_img_list
+
+        if (self.root / "alpaca.json").exists():
+            with open(self.root / "alpaca.json", "rb") as f:
+                data = json.load(f)
+
+            for item in data:
+                self.cap_list.append([item])
 
     def load_dataset(self):
         for i in range(len(self.img_dir)):
@@ -437,18 +459,20 @@ class InstructDataset(CaptionDataset):
             dataset_name = self.json_dir[i].stem
             for item in data:
                 if dataset_name.endswith("RSVG"):
-                    img_path = self.img_dir[i] / item["img"]
-                    item["conv"] = dict(Question=item["question"], Answer=item["answer"])
+                    img_path = self.img_dir[i] / item["image"]
                 elif dataset_name.endswith("DIOR"):
-                    img_path = self.img_dir[i] / (item["img"] + ".jpg")
-                    item["conv"] = dict(Question=item["question"], Answer=item["answer"])
+                    img_path = self.img_dir[i] / (item["image"] + ".jpg")
                 elif "METERML" in dataset_name:
-                    img_path = self.img_dir[i] / item["name"] / "naip.png"
+                    img_path = self.img_dir[i] / item["image"] / "naip.png"
                 elif "OSM" in dataset_name:
-                    img_path = self.img_dir[i] / (item["filename"] + ".jpg")
+                    img_path = self.img_dir[i] / (item["image"] + ".jpg")
+                elif "DOTA" in dataset_name or "FAST" in dataset_name:
+                    img_path = self.img_dir[i] / item["image"]
                 else:
                     if "name" in item.keys():
                         img_path = self.img_dir[i] / item["name"]
+                    elif "image" in item.keys():
+                        img_path = self.img_dir[i] / item["image"]
                     else:
                         file_name = item["filename"]
                         if isinstance(file_name, list):
@@ -490,7 +514,6 @@ class InstructDatasetWithTaskId(InstructDataset):
     WEIGHT_DICT = {
         "OSM": 0.6,
         "LLAVA": 1.0,
-        "geosignal": 0.50,
         "RSITMD": 0.6,
         "NWPU": 0.6,
         "DOTA": 0.9,
@@ -517,20 +540,6 @@ class InstructDatasetWithTaskId(InstructDataset):
             if file not in self.json_dir:
                 self.txt_json_dir.append(file)
 
-        for dir in self.txt_json_dir:
-            if "geosignal" in dir.stem:
-                with open(dir, "rb") as f:
-                    data = json.load(f)
-                for item in data:
-                    conv = [
-                        {
-                            "Question": item["instruction"] + item["input"],
-                            "Answer": item["output"],
-                        }
-                    ]
-                    self.cap_list.append(conv)
-                    self.sample_weight.append(self.WEIGHT_DICT["geosignal"])
-
     def load_dataset(self):
         for i in range(len(self.img_dir)):
             with open(self.json_dir[i], "rb") as f:
@@ -542,11 +551,9 @@ class InstructDatasetWithTaskId(InstructDataset):
             dataset_name = self.json_dir[i].stem
             for item in data:
                 if dataset_name.endswith("RSVG"):
-                    img_path = self.img_dir[i] / item["img"]
-                    item["conv"] = dict(Question=item["question"], Answer=item["answer"])
+                    img_path = self.img_dir[i] / item["image"]
                 elif dataset_name.endswith("DIOR"):
-                    img_path = self.img_dir[i] / (item["img"] + ".jpg")
-                    item["conv"] = dict(Question=item["question"], Answer=item["answer"])
+                    img_path = self.img_dir[i] / (item["image"] + ".jpg")
                 elif "METERML" in dataset_name:
                     img_path = self.img_dir[i] / item["name"] / "naip.png"
                 elif "OSM" in dataset_name:
@@ -723,7 +730,7 @@ def RS5MDataset(
             assert isinstance(value, bytes)
             value = Image.open(io.BytesIO(value))
             if transform is not None:
-                if isinstance(transform, CLIPImageProcessor):
+                if isinstance(transform, BaseImageProcessor):
                     value = transform(value, return_tensors="pt").pixel_values.squeeze()
                 else:
                     value = transform(value)
@@ -866,11 +873,6 @@ def preprocess_multimodal(
                 value = value.replace(DEFAULT_IMAGE_TOKEN, "").strip()
                 value = DEFAULT_IMAGE_TOKEN + "\n" + value
                 value = value.strip()
-                if "mmtag" in conversation_lib.default_conversation.version:
-                    value = value.replace(
-                        DEFAULT_IMAGE_TOKEN,
-                        "<Image>" + DEFAULT_IMAGE_TOKEN + "</Image>",
-                    )
                 replace_token = DEFAULT_IMAGE_TOKEN
                 if tune_im_start:
                     replace_token = DEFAULT_IM_START_TOKEN + replace_token + DEFAULT_IM_END_TOKEN
@@ -879,6 +881,84 @@ def preprocess_multimodal(
         sources[idx] = source
 
     return sources
+
+
+def preprocess_llama3(sources, tokenizer: transformers.PreTrainedTokenizer, has_image: bool = False) -> Dict:
+    conv = conversation_lib.default_conversation.copy()
+    roles = {"Question": conv.roles[0], "Answer": conv.roles[1]}
+
+    # Apply prompt templates
+    conversations = []
+    for i, source in enumerate(sources):
+        for j, key in enumerate(source):
+            role = roles[key]
+            assert role == conv.roles[j % 2], f"{i}"
+            conv.append_message(role, source[key])
+    conversations.append(conv.get_prompt())
+
+    # Tokenize conversations
+
+    if has_image:
+        input_ids = torch.stack(
+            [tokenizer_image_token(prompt, tokenizer, return_tensors="pt") for prompt in conversations], dim=0
+        )
+    else:
+        input_ids = tokenizer(
+            conversations,
+            return_tensors="pt",
+            padding="longest",
+            max_length=tokenizer.model_max_length,
+            truncation=True,
+        ).input_ids
+
+    targets = input_ids.clone()
+    assert conv.sep_style == conversation_lib.SeparatorStyle.MPT
+
+    # Mask targets
+    sep = conv.sep + conv.roles[1]
+    for conversation, target in zip(conversations, targets):
+        total_len = int(target.ne(tokenizer.pad_token_id).sum())
+
+        rounds = conversation.split(conv.sep)
+        re_rounds = [conv.sep.join(rounds[:3])]
+        for conv_idx in range(3, len(rounds), 2):
+            re_rounds.append(conv.sep.join(rounds[conv_idx : conv_idx + 2]))
+        cur_len = 0
+        target[:cur_len] = IGNORE_INDEX
+        for i, rou in enumerate(re_rounds):
+            if rou == "":
+                break
+
+            parts = rou.split(sep)
+            if len(parts) != 2:
+                break
+            parts[0] += sep
+
+            if has_image:
+                round_len = len(tokenizer_image_token(rou, tokenizer)) + 1
+                instruction_len = len(tokenizer_image_token(parts[0], tokenizer))
+            else:
+                round_len = len(tokenizer(rou).input_ids) + 1
+                instruction_len = len(tokenizer(parts[0]).input_ids)
+
+            if i > 0:
+                round_len -= 1
+                instruction_len -= 1
+
+            target[cur_len : cur_len + instruction_len] = IGNORE_INDEX
+
+            cur_len += round_len
+        target[cur_len:] = IGNORE_INDEX
+
+        if cur_len < tokenizer.model_max_length:
+            if cur_len != total_len:
+                target[:] = IGNORE_INDEX
+                print(f"WARNING: tokenization mismatch: {cur_len} vs. {total_len}." f" (ignored)")
+
+    return dict(
+        input_ids=input_ids,
+        labels=targets,
+    )
 
 
 def preprocess_llama_2(
@@ -1053,6 +1133,8 @@ def preprocess(
     tokenizer: transformers.PreTrainedTokenizer,
     has_image: bool = False,
 ) -> Dict:
+    if conversation_lib.default_conversation.version == "llama3":
+        return preprocess_llama3(sources, tokenizer, has_image=has_image)
     if conversation_lib.default_conversation.sep_style == conversation_lib.SeparatorStyle.PLAIN:
         return preprocess_plain(sources, tokenizer)
     if conversation_lib.default_conversation.sep_style == conversation_lib.SeparatorStyle.LLAMA_2:

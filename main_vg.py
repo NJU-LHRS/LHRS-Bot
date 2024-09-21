@@ -22,7 +22,7 @@ from lhrs.Dataset.conversation import default_conversation
 from lhrs.models import build_model
 from lhrs.utils import type_dict
 from tqdm import tqdm
-from transformers import CLIPImageProcessor
+from transformers import SiglipImageProcessor
 
 logger = logging.getLogger("train")
 
@@ -147,7 +147,7 @@ def main(config: ml_collections.ConfigDict):
     dtype = type_dict[config.dtype]
     model.to(dtype)
 
-    vis_transform = CLIPImageProcessor.from_pretrained("openai/clip-vit-large-patch14")
+    vis_transform = SiglipImageProcessor.from_pretrained(config.rgb_vision.vit_name)
     dataset = VGEvalDataset(
         root=config.data_path,
         target=config.data_target,
@@ -226,7 +226,8 @@ def main(config: ml_collections.ConfigDict):
 
     save_result(preds, config.output, "eval_save_file", "filename")
     if is_main_process():
-        pattern = r"\[([0-9., ]+)\]"
+        pattern = r"<bbox>\[(.*?)\]</bbox>"
+        target_pattern = r"\[([0-9., ]+)\]"
 
         with open(os.path.join(config.output, "eval_save_file.json")) as f:
             predictions = json.load(f)
@@ -244,7 +245,7 @@ def main(config: ml_collections.ConfigDict):
                 fail_instance += 1
                 continue
 
-            target_match = re.findall(pattern, item["target"])
+            target_match = re.findall(target_pattern, item["target"])
             target_result = [list(map(float, match.split(","))) for match in target_match]
 
             new_pred_result = []

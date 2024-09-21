@@ -3,10 +3,13 @@ import PIL
 from timm.data import create_transform
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from torchvision import transforms
-from transformers import CLIPImageProcessor
+from transformers import SiglipImageProcessor
 
 
 def build_cls_transform(config, is_train=True):
+    if config.rgb_vision.arch.startswith("vit"):
+        return SiglipImageProcessor.from_pretrained(config.rgb_vision.vit_name)
+    
     mean = IMAGENET_DEFAULT_MEAN
     std = IMAGENET_DEFAULT_STD
 
@@ -29,9 +32,7 @@ def build_cls_transform(config, is_train=True):
     crop_pct = 224 / 256
     size = int(config.transform.input_size[0] / crop_pct)
     t.append(
-        transforms.Resize(
-            size, interpolation=PIL.Image.BICUBIC
-        ),  # to maintain same ratio w.r.t. 224 images
+        transforms.Resize(size, interpolation=PIL.Image.BICUBIC),  # to maintain same ratio w.r.t. 224 images
     )
     t.append(transforms.CenterCrop(config.transform.input_size))
 
@@ -42,7 +43,7 @@ def build_cls_transform(config, is_train=True):
 
 def build_vlp_transform(config: ml_collections.ConfigDict, is_train: bool = True):
     if config.rgb_vision.arch.startswith("vit"):
-        return CLIPImageProcessor.from_pretrained(config.rgb_vision.vit_name)
+        return SiglipImageProcessor.from_pretrained(config.rgb_vision.vit_name)
 
     mean = IMAGENET_DEFAULT_MEAN
     std = IMAGENET_DEFAULT_STD
@@ -62,9 +63,7 @@ def build_vlp_transform(config: ml_collections.ConfigDict, is_train: bool = True
     crop_pct = 224 / 256
     size = int(config.transform.input_size[0] / crop_pct)
     t.append(
-        transforms.Resize(
-            size, interpolation=PIL.Image.BICUBIC
-        ),  # to maintain same ratio w.r.t. 224 images
+        transforms.Resize(size, interpolation=PIL.Image.BICUBIC),  # to maintain same ratio w.r.t. 224 images
     )
     t.append(transforms.CenterCrop(config.transform.input_size))
 

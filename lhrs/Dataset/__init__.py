@@ -10,6 +10,6 @@ from .cap_dataset import (
     VGEvalDataset,
     conversation_lib,
 )
-from .ImageFolderInstance import CLASS_NAME_MAP, ImageFolderInstance
+from .ImageFolderInstance import ImageFolderInstance
 from .rsvqa import RSVQAHR, RSVQALR, DataCollatorForVQASupervisedDataset
 from .UCM import UCM

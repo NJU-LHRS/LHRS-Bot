@@ -45,7 +45,7 @@ class CustomLlamaForCausalLM(LlamaForCausalLM):
             input_ids = input_ids[:, -1:]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and past_key_values.get_seq_length() == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
@@ -82,8 +82,7 @@ class TextModal(BaseModal):
         if getattr(config, "is_distribute", False):
             device = torch.device(getattr(config, "local_rank", 0))
         elif (
-            "CUDA_VISABLE_DEVICES" in os.environ.keys()
-            and len(os.environ["CUDA_VISABLE_DEVICES"].split(",")) == 1
+            "CUDA_VISABLE_DEVICES" in os.environ.keys() and len(os.environ["CUDA_VISABLE_DEVICES"].split(",")) == 1
         ):
             device = torch.device("cuda:" + os.environ["CUDA_VISABLE_DEVICES"])
         else:
@@ -108,10 +107,9 @@ class TextModal(BaseModal):
                 )
             )
         else:
-            bnb_model_from_pretrained_args.update(
-                dict(device_map={"": device}, torch_dtype=compute_dtype)
-            )
+            bnb_model_from_pretrained_args.update(dict(device_map={"": device}, torch_dtype=compute_dtype))
 
+        bnb_model_from_pretrained_args["use_flash_attention_2"] = True
         self.text_encoder = CustomLlamaForCausalLM.from_pretrained(
             config.text.path, **bnb_model_from_pretrained_args
         )
@@ -122,9 +120,7 @@ class TextModal(BaseModal):
             from peft import prepare_model_for_kbit_training
 
             self.text_encoder.config.torch_dtype = (
-                torch.float32
-                if config.fp16
-                else (torch.bfloat16 if config.bf16 else torch.float32)
+                torch.float32 if config.fp16 else (torch.bfloat16 if config.bf16 else torch.float32)
             )
             self.text_encoder = prepare_model_for_kbit_training(
                 self.text_encoder, use_gradient_checkpointing=config.use_checkpoint
@@ -137,6 +133,7 @@ class TextModal(BaseModal):
                 r=config.lora.lora_r,
                 lora_alpha=config.lora.lora_alpha,
                 target_modules=find_all_linear_names(self.text_encoder),
+                # target_modules=("q_proj", "v_proj", "up_proj", "down_proj"),
                 lora_dropout=config.lora.lora_dropout,
                 bias=config.lora.lora_bias,
                 task_type="CAUSAL_LM",
@@ -159,9 +156,7 @@ class TextModal(BaseModal):
                 def make_inputs_require_grad(module, input, output):
                     output.requires_grad_(True)
 
-                self.get_text_encoder().get_input_embeddings().register_forward_hook(
-                    make_inputs_require_grad
-                )
+                self.get_text_encoder().get_input_embeddings().register_forward_hook(make_inputs_require_grad)
 
         if config.bits in [4, 8]:
             from peft.tuners.lora import LoraLayer
@@ -175,7 +170,8 @@ class TextModal(BaseModal):
                         module = module.to(torch.bfloat16)
                     else:
                         module = module.to(torch.float32)
-                if "lm_head" in name or "embed_tokens" in name or "cls_token" in name:
+
+                if "lm_head" in name or "embed_tokens" in name:
                     if hasattr(module, "weight"):
                         if config.bf16 and module.weight.dtype == torch.float32:
                             module = module.to(torch.bfloat16)
@@ -194,7 +190,20 @@ class TextModal(BaseModal):
         """
 
         tokenizer = LlamaTokenizerFast.from_pretrained(tokenizer_name)
-        tokenizer.pad_token_id = tokenizer.unk_token_id
+
+        if tokenizer.pad_token_id is None:
+            num_new_tokens = tokenizer.add_special_tokens(dict(pad_token="|<pad>|"))
+            self.get_text_encoder().resize_token_embeddings(len(tokenizer))
+
+            if num_new_tokens > 0:
+                input_embeddings = self.get_text_encoder().get_input_embeddings().weight.data
+                output_embeddings = self.get_text_encoder().get_output_embeddings().weight.data
+
+                input_embeddings_avg = input_embeddings[:-num_new_tokens].mean(dim=0, keepdim=True)
+                output_embeddings_avg = output_embeddings[:-num_new_tokens].mean(dim=0, keepdim=True)
+
+                input_embeddings[-num_new_tokens:] = input_embeddings_avg
+                output_embeddings[-num_new_tokens:] = output_embeddings_avg
 
         if self.tune_im_patch:
             tokenizer.add_tokens([DEFAULT_IMAGE_PATCH_TOKEN], special_tokens=True)
@@ -207,19 +216,11 @@ class TextModal(BaseModal):
             self.get_text_encoder().resize_token_embeddings(len(tokenizer))
 
             if num_new_tokens > 0:
-                input_embeddings = (
-                    self.get_text_encoder().get_input_embeddings().weight.data
-                )
-                output_embeddings = (
-                    self.get_text_encoder().get_output_embeddings().weight.data
-                )
+                input_embeddings = self.get_text_encoder().get_input_embeddings().weight.data
+                output_embeddings = self.get_text_encoder().get_output_embeddings().weight.data
 
-                input_embeddings_avg = input_embeddings[:-num_new_tokens].mean(
-                    dim=0, keepdim=True
-                )
-                output_embeddings_avg = output_embeddings[:-num_new_tokens].mean(
-                    dim=0, keepdim=True
-                )
+                input_embeddings_avg = input_embeddings[:-num_new_tokens].mean(dim=0, keepdim=True)
+                output_embeddings_avg = output_embeddings[:-num_new_tokens].mean(dim=0, keepdim=True)
 
                 input_embeddings[-num_new_tokens:] = input_embeddings_avg
                 output_embeddings[-num_new_tokens:] = output_embeddings_avg
@@ -293,6 +294,42 @@ class TextModal(BaseModal):
 
         return text_loss
 
+    def decode_without_loss(
+        self,
+        input_ids: torch.Tensor,
+        image_embedding: torch.Tensor = None,
+        attention_mask: Optional[Union[torch.Tensor, None]] = None,
+        labels: torch.Tensor = None,
+    ) -> Tuple[torch.Tensor]:
+        #    cl_loss_func: Callable = None,
+        #    cl_logit_scale: torch.Tensor = None) -> Tuple[torch.Tensor]:
+        (
+            input_ids,
+            attention_mask,
+            past_key_values,
+            inputs_embeds,
+            labels,
+        ) = self.prepare_inputs_for_multimodal(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=labels,
+            image_embedding=image_embedding if image_embedding is not None else None,
+            past_key_values=None,
+        )
+
+        outputs = self.text_encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            labels=labels,
+            output_hidden_states=True,
+            use_cache=False,
+            return_dict=True,
+        )
+
+        return outputs.logits
+
     def prepare_inputs_for_multimodal(
         self,
         input_ids: torch.Tensor,
@@ -302,11 +339,7 @@ class TextModal(BaseModal):
         image_embedding: Optional[Union[torch.Tensor, None]] = None,
     ):
         if image_embedding is None or input_ids.shape[1] == 1:
-            if (
-                past_key_values is not None
-                and image_embedding is not None
-                and input_ids.shape[1] == 1
-            ):
+            if past_key_values is not None and image_embedding is not None and input_ids.shape[1] == 1:
                 attention_mask = torch.ones(
                     (attention_mask.shape[0], past_key_values[-1][-1].shape[-2] + 1),
                     dtype=attention_mask.dtype,
@@ -320,9 +353,7 @@ class TextModal(BaseModal):
         for batch_idx, cur_input_ids in enumerate(input_ids):
             if (cur_input_ids == IMAGE_TOKEN_INDEX).sum() == 0:
                 # multimodal LLM, but the current sample is not multimodal
-                cur_input_embeds = self.get_text_encoder().model.embed_tokens(
-                    cur_input_ids
-                )
+                cur_input_embeds = self.get_text_encoder().model.embed_tokens(cur_input_ids)
                 cur_input_embeds = (
                     cur_input_embeds
                     + torch.zeros(
@@ -337,26 +368,25 @@ class TextModal(BaseModal):
                     new_labels.append(labels[batch_idx])
                 cur_image_idx += 1
                 continue
-            image_token_indices = torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[
-                0
-            ]  # -200 That's <image>
+
+            image_token_indices = torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0]  # -200 That's <image>
             cur_new_input_embeds = []
             if labels is not None:
                 cur_labels = labels[batch_idx]
                 cur_new_labels = []
                 assert cur_labels.shape == cur_input_ids.shape
             while image_token_indices.numel() > 0:
-                cur_image_features = image_embedding[
-                    cur_image_idx
-                ]  # cur_image_idx: batch idx
+                try:
+                    cur_image_features = image_embedding[cur_image_idx]  # cur_image_idx: batch idx
+                except IndexError:
+                    raise ValueError(
+                        f"Image embedding index {cur_image_idx} is out of range. "
+                        f"Check if the number of image embeddings is correct."
+                    )
                 image_token_start = image_token_indices[0]  # image index (-200)
-                if getattr(self, "tune_pooler", False) and getattr(
-                    self, "tune_im_start", False
-                ):
+                if getattr(self, "tune_pooler", False) and getattr(self, "tune_im_start", False):
                     cur_new_input_embeds.append(
-                        self.get_text_encoder()
-                        .model.embed_tokens(cur_input_ids[: image_token_start - 1])
-                        .detach()
+                        self.get_text_encoder().model.embed_tokens(cur_input_ids[: image_token_start - 1]).detach()
                     )  # before the <im_start>
                     cur_new_input_embeds.append(
                         self.get_text_encoder().model.embed_tokens(
@@ -381,15 +411,11 @@ class TextModal(BaseModal):
                                 dtype=labels.dtype,
                             )
                         )
-                        cur_new_labels.append(
-                            cur_labels[image_token_start : image_token_start + 1]
-                        )
+                        cur_new_labels.append(cur_labels[image_token_start : image_token_start + 1])
                         cur_labels = cur_labels[image_token_start + 2 :]
                 else:
                     cur_new_input_embeds.append(
-                        self.get_text_encoder().model.embed_tokens(
-                            cur_input_ids[:image_token_start]
-                        )
+                        self.get_text_encoder().model.embed_tokens(cur_input_ids[:image_token_start])
                     )
                     cur_new_input_embeds.append(cur_image_features)
                     if labels is not None:
@@ -404,33 +430,21 @@ class TextModal(BaseModal):
                         )
                         cur_labels = cur_labels[image_token_start + 1 :]
                 cur_image_idx += 1
-                if getattr(self, "tune_pooler", False) and getattr(
-                    self, "tune_im_start", False
-                ):
+                if getattr(self, "tune_pooler", False) and getattr(self, "tune_im_start", False):
                     cur_input_ids = cur_input_ids[image_token_start + 2 :]
                 else:
                     cur_input_ids = cur_input_ids[image_token_start + 1 :]
                 image_token_indices = torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0]
 
             if cur_input_ids.numel() > 0:
-                if getattr(self, "tune_pooler", False) and getattr(
-                    self, "tune_im_start", False
-                ):
-                    cur_new_input_embeds.append(
-                        self.get_text_encoder()
-                        .model.embed_tokens(cur_input_ids)
-                        .detach()
-                    )
+                if getattr(self, "tune_pooler", False) and getattr(self, "tune_im_start", False):
+                    cur_new_input_embeds.append(self.get_text_encoder().model.embed_tokens(cur_input_ids).detach())
                 else:
-                    cur_new_input_embeds.append(
-                        self.get_text_encoder().model.embed_tokens(cur_input_ids)
-                    )
+                    cur_new_input_embeds.append(self.get_text_encoder().model.embed_tokens(cur_input_ids))
                 if labels is not None:
                     cur_new_labels.append(cur_labels)
 
-            cur_new_input_embeds = [
-                x.to(device=input_ids.device) for x in cur_new_input_embeds
-            ]
+            cur_new_input_embeds = [x.to(device=input_ids.device) for x in cur_new_input_embeds]
             cur_new_input_embeds = torch.cat(cur_new_input_embeds, dim=0)
             new_input_embeds.append(cur_new_input_embeds)
             if labels is not None:
@@ -518,9 +532,7 @@ class TextModal(BaseModal):
                     dtype=attention_mask.dtype,
                     device=attention_mask.device,
                 )
-                attention_mask = torch.cat(
-                    (new_attn_mask_pad_left, attention_mask), dim=1
-                )
+                attention_mask = torch.cat((new_attn_mask_pad_left, attention_mask), dim=1)
                 assert attention_mask.shape == new_input_embeds.shape[:2]
 
         return None, attention_mask, past_key_values, new_input_embeds, new_labels
@@ -555,9 +567,7 @@ class TextModal(BaseModal):
                         "<Image>" + DEFAULT_IMAGE_TOKEN + "</Image>",
                     )
                 replace_token = DEFAULT_IMAGE_TOKEN
-                replace_token = (
-                    DEFAULT_IM_START_TOKEN + replace_token + DEFAULT_IM_END_TOKEN
-                )
+                replace_token = DEFAULT_IM_START_TOKEN + replace_token + DEFAULT_IM_END_TOKEN
                 value = value.replace(DEFAULT_IMAGE_TOKEN, replace_token)
 
                 conv.append_message(conv.roles[0], value)
@@ -565,9 +575,7 @@ class TextModal(BaseModal):
                 prompt = conv.get_prompt()
 
                 input_ids = (
-                    tokenizer_image_token(
-                        prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt"
-                    )
+                    tokenizer_image_token(prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt")
                     .unsqueeze(0)
                     .expand(image_embedding.size(0), -1)
                 )
@@ -627,9 +635,7 @@ class TextModal(BaseModal):
             return outputs
 
 
-def tokenizer_image_token(
-    prompt, tokenizer, image_token_index=IMAGE_TOKEN_INDEX, return_tensors=None
-):
+def tokenizer_image_token(prompt, tokenizer, image_token_index=IMAGE_TOKEN_INDEX, return_tensors=None):
     prompt_chunks = [tokenizer(chunk).input_ids for chunk in prompt.split("<image>")]
 
     def insert_separator(X, sep):
@@ -637,11 +643,7 @@ def tokenizer_image_token(
 
     input_ids = []
     offset = 0
-    if (
-        len(prompt_chunks) > 0
-        and len(prompt_chunks[0]) > 0
-        and prompt_chunks[0][0] == tokenizer.bos_token_id
-    ):
+    if len(prompt_chunks) > 0 and len(prompt_chunks[0]) > 0 and prompt_chunks[0][0] == tokenizer.bos_token_id:
         offset = 1
         input_ids.append(prompt_chunks[0][0])
 

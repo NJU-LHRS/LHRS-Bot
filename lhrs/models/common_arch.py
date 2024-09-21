@@ -1,79 +1,62 @@
 from collections import OrderedDict
-from typing import Callable, List, Optional, Union
+from typing import Callable, List, Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.checkpoint import checkpoint
+from lhrs.models.moe_layers import LinearGLUMoELayer
 
 
-class TextProjHead(nn.Module):
-    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int):
-        super().__init__()
-        if hidden_dim != in_dim:
-            self.in_proj = nn.Linear(in_dim, hidden_dim)
-            self.in_norm = nn.LayerNorm(hidden_dim)
-        else:
-            self.in_proj = self.in_norm = None
-        self.proj = nn.Linear(hidden_dim, out_dim, bias=False)
+def get_2d_sincos_pos_embed(embed_dim, image_size):
+    """
+    image_size: image_size or (image_height, image_width)
+    return:
+    pos_embed: [image_height, image_width, embed_dim]
+    """
+    if isinstance(image_size, int):
+        grid_h_size, grid_w_size = image_size, image_size
+    else:
+        grid_h_size, grid_w_size = image_size[0], image_size[1]
 
-    def forward(self, x: torch.Tensor):
-        if self.in_proj is not None:
-            x = self.in_norm(self.in_proj(x))
-        return self.proj(x)
+    grid_h = np.arange(grid_h_size, dtype=np.float32)
+    grid_w = np.arange(grid_w_size, dtype=np.float32)
+    grid = np.meshgrid(grid_w, grid_h)  # here w goes first
+    grid = np.stack(grid, axis=0)
 
-    @classmethod
-    def from_pretrained(cls, path, **kwargs):
-        in_dim = kwargs.pop("in_dim", 4096)
-        hidden_dim = kwargs.pop("hidden_dim", 768)
-        out_dim = kwargs.pop("out_dim", 768)
-        model = cls(in_dim=in_dim, hidden_dim=hidden_dim, out_dim=out_dim)
-        ckpt = torch.load(path)
-        if "text_projection.weight" in ckpt.keys():
-            new_ckpt = {"weight": ckpt["text_projection.weight"]}
-            model.proj.load_state_dict(new_ckpt)
-            del new_ckpt
-        del ckpt
-        return model
+    pos_embed = get_2d_sincos_pos_embed_from_grid(embed_dim, grid)
+    return pos_embed
 
 
-class RgbProjHead(TextProjHead):
-    @classmethod
-    def from_pretrained(cls, path, **kwargs):
-        in_dim = kwargs.pop("in_dim", 4096)
-        hidden_dim = kwargs.pop("hidden_dim", 1024)
-        out_dim = kwargs.pop("out_dim", 768)
-        model = cls(in_dim=in_dim, hidden_dim=hidden_dim, out_dim=out_dim)
-        ckpt = torch.load(path)
-        if "visual_projection.weight" in ckpt.keys():
-            new_ckpt = {"weight": ckpt["visual_projection.weight"]}
-            model.proj.load_state_dict(new_ckpt)
-            del new_ckpt
-        del ckpt
+def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
+    assert embed_dim % 2 == 0
 
-        return model
+    # use half of dimensions to encode grid_h
+    emb_h = get_1d_sincos_pos_embed_from_grid_new(embed_dim // 2, grid[0])  # (H, W, D/2)
+    emb_w = get_1d_sincos_pos_embed_from_grid_new(embed_dim // 2, grid[1])  # (H, W, D/2)
+
+    emb = np.concatenate([emb_h, emb_w], axis=-1)  # (H, W, D)
+    return emb
 
 
-class LinearProjection(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, layers: int = 2):
-        super().__init__()
-        self.layers = [nn.Linear(in_channels, out_channels)]
-        for _ in range(layers):
-            self.layers.append(nn.GELU())
-            self.layers.append(nn.Linear(out_channels, out_channels))
-        self.layers = nn.Sequential(*self.layers)
+def get_1d_sincos_pos_embed_from_grid_new(embed_dim, pos):
+    """
+    embed_dim: output dimension for each position
+    pos: a list of positions to be encoded: size (H, W)
+    out: (H, W, D)
+    """
+    assert embed_dim % 2 == 0
+    omega = np.arange(embed_dim // 2, dtype=np.float32)
+    omega /= embed_dim / 2.0
+    omega = 1.0 / 10000**omega  # (D/2,)
 
-    def forward(self, x: torch.Tensor):
-        org_dtype = x.dtype
-        org_module_dtype = self.layers[0].weight.dtype
+    out = np.einsum("hw,d->hwd", pos, omega)  # (H, W, D/2), outer product
 
-        self.layers.to(torch.float32)
-        x = x.to(torch.float32)
+    emb_sin = np.sin(out)  # (H, W, D/2)
+    emb_cos = np.cos(out)  # (H, W, D/2)
 
-        x = self.layers(x)
-        x.to(org_dtype)
-        self.layers.to(org_module_dtype)
-        return x
+    emb = np.concatenate([emb_sin, emb_cos], axis=-1)  # (H, W, D)
+    return emb
 
 
 class AttnPooler(nn.Module):
@@ -100,14 +83,24 @@ class AttnPooler(nn.Module):
         output_size: int,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
         checkpoint: bool = False,
-        stage_num: Union[List, int] = [64, 48, 32],  # [64, 48, 32]
+        stage_num: Union[List, int] = [112, 96, 64],  # [64, 48, 32]
         split_part: List = [256, 256, 256],  # [256,256, 256]
+        max_size: int = 64,
+        num_patches: Tuple[int, int] = (8, 8),
+        use_moe: bool = False,
+        num_experts: int = 1,
+        num_selects: int = 1,
     ):
         super().__init__()
         self.checkpoint = checkpoint
         self.num_query = num_query
         self.stage_num = stage_num
         self.split_part = split_part
+        self.max_size = max_size
+        self.embed_dim = hidden_size
+        self.num_patches = num_patches
+        self.use_moe = use_moe
+        self.num_experts = num_experts
 
         self.query = nn.Parameter(torch.zeros(1, num_query, hidden_size))
         nn.init.trunc_normal_(self.query, std=0.02, mean=0.0)
@@ -115,7 +108,7 @@ class AttnPooler(nn.Module):
         if encoder_hidden_size != hidden_size:
             self.in_proj = nn.Linear(encoder_hidden_size, hidden_size)
         else:
-            self.in_proj = None
+            self.in_proj = nn.Identity()
 
         self.layers = nn.ModuleList(
             [
@@ -124,19 +117,40 @@ class AttnPooler(nn.Module):
                     n_head=num_attention_heads,
                     is_cross_attention=True,
                     norm_layer=norm_layer,
+                    use_moe=use_moe,
+                    num_experts=num_experts,
+                    num_selects=num_selects,
                 )
                 for _ in range(num_layers)
             ]
         )
 
+        self.layernorm_query = norm_layer(hidden_size)
+        self.layernorm_kv = norm_layer(hidden_size)
+        self.layernorm_post = norm_layer(hidden_size)
         self.out_proj = nn.Linear(hidden_size, output_size)
+
+        self._set_2d_pos_embed(self.max_size)
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            nn.init.trunc_normal_(m.weight, std=0.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+
+    def _set_2d_pos_embed(self, max_size, device="cpu"):
+        pos_embed = torch.from_numpy(get_2d_sincos_pos_embed(self.embed_dim, max_size)).float().to(device)
+        self.register_buffer("pos_embed", pos_embed, persistent=False)
 
     def forward(
         self,
         image_embs: torch.Tensor,
     ) -> torch.Tensor:
-        if self.in_proj is not None:
-            image_embs = self.in_proj(image_embs)
+        image_embs = self.in_proj(image_embs)
 
         query_tokens = self.query.expand(image_embs.size(0), -1, -1)
 
@@ -145,48 +159,60 @@ class AttnPooler(nn.Module):
                 query_tokens, self.num_query // self.stage_num, dim=1
             )
         else:
-            stage1_query, stage2_query, stage3_query = torch.split(
-                query_tokens, self.stage_num, dim=1
-            )
-        stage1_image, stage2_image, stage3_image = torch.split(
-            image_embs, self.split_part, dim=1
-        )
+            stage1_query, stage2_query, stage3_query = torch.split(query_tokens, self.stage_num, dim=1)
+
+        stage1_image, stage2_image, stage3_image = torch.split(image_embs, self.split_part, dim=1)
 
         all_tokens = []
+        pos_embed = (
+            self.pos_embed[: self.num_patches[0], : self.num_patches[1], :]
+            .reshape(self.num_patches[0] * self.num_patches[1], -1)
+            .to(image_embs.dtype)
+        )
+        pos_embed = pos_embed.unsqueeze(0).expand(image_embs.size(0), -1, -1)
+        pos_embed = pos_embed.permute(1, 0, 2)  # (B, L, D) -> (L, B, D)
         for sub_token, sub_image in zip(
             [stage1_query, stage2_query, stage3_query],
             [stage1_image, stage2_image, stage3_image],
         ):
-            cat_embs = torch.cat([sub_token, sub_image], dim=1)
-            # cat_embs = sub_image
-            cat_embs = cat_embs.permute(1, 0, 2)  # (B, L, D) -> (L, B, D)
+            sub_token = self.layernorm_query(sub_token)
+            sub_image = self.layernorm_kv(sub_image)
+
+            sub_image = sub_image.permute(1, 0, 2)  # (B, L, D) -> (L, B, D)
             sub_token = sub_token.permute(1, 0, 2)  # (B, L, D) -> (L, B, D)
 
             for layer in self.layers:
-                sub_token = layer(sub_token, cat_embs, cat_embs)
+                sub_token = layer(sub_token, sub_image + pos_embed, sub_image)
 
             sub_token = sub_token.permute(1, 0, 2)  # (L, B, D) -> (B, L, D)
             all_tokens.append(sub_token)
 
         query_tokens = torch.cat(all_tokens, dim=1)
+        query_tokens = self.layernorm_post(query_tokens)
         out = self.out_proj(query_tokens)
         return out
 
-        # cat_embs = torch.cat([query_tokens, image_embs], dim=1)
+    def load_state_dict(self, state_dict, **kwrags):
+        msg = super().load_state_dict(state_dict, strict=False)
 
-        # cat_embs = cat_embs.permute(1, 0, 2)  # (B, L, D) -> (L, B, D)
-        # query_tokens = query_tokens.permute(1, 0, 2)  # (B, L, D) -> (L, B, D)
+        if len(msg.missing_keys) > 0:
+            assert self.use_moe
+            layer_up_weight = "layers.{}.mlp.c_fc.weight"
+            layer_up_bias = "layers.{}.mlp.c_fc.bias"
+            layer_down_weight = "layers.{}.mlp.c_proj.weight"
+            layer_down_bias = "layers.{}.mlp.c_proj.bias"
 
-        # for layer in self.layers:
-        #     if self.checkpoint and not torch.jit.is_scripting():
-        #         query_tokens = checkpoint(layer, query_tokens, cat_embs, cat_embs)
-        #     else:
-        #         query_tokens = layer(query_tokens, cat_embs, cat_embs)
+            for layer_idx in range(len(self.layers)):
+                up_weight = state_dict[layer_up_weight.format(layer_idx)]
+                up_bias = state_dict[layer_up_bias.format(layer_idx)]
+                down_weight = state_dict[layer_down_weight.format(layer_idx)]
+                down_bias = state_dict[layer_down_bias.format(layer_idx)]
 
-        # query_tokens = query_tokens.permute(1, 0, 2)  # (L, B, D) -> (B, L, D)
-        # out = self.out_proj(query_tokens)
-
-        # return out
+                for expert_idx in range(self.num_experts):
+                    self.layers[layer_idx].mlp.calculator.experts.weight_up[expert_idx].data = up_weight
+                    self.layers[layer_idx].mlp.calculator.experts.bias_up[expert_idx].data = up_bias
+                    self.layers[layer_idx].mlp.calculator.experts.weight_down[expert_idx].data = down_weight.mT
+                    self.layers[layer_idx].mlp.calculator.experts.bias_down[expert_idx].data = down_bias
 
 
 class PatchDropout(nn.Module):
@@ -244,9 +270,7 @@ class LayerNormFp32(nn.LayerNorm):
 
     def forward(self, x: torch.Tensor):
         orig_type = x.dtype
-        x = F.layer_norm(
-            x.to(torch.float32), self.normalized_shape, self.weight, self.bias, self.eps
-        )
+        x = F.layer_norm(x.to(torch.float32), self.normalized_shape, self.weight, self.bias, self.eps)
         return x.to(orig_type)
 
 
@@ -269,35 +293,34 @@ class ResidualAttentionBlock(nn.Module):
         act_layer: Callable = nn.GELU,
         norm_layer: Callable = LayerNorm,
         is_cross_attention: bool = False,
+        use_moe: bool = False,
+        num_experts: int = 1,
+        num_selects: int = 1,
     ):
         super().__init__()
 
         self.ln_1 = norm_layer(d_model)
         self.attn = nn.MultiheadAttention(d_model, n_head)
-        self.ls_1 = (
-            LayerScale(d_model, ls_init_value)
-            if ls_init_value is not None
-            else nn.Identity()
-        )
+        self.ls_1 = LayerScale(d_model, ls_init_value) if ls_init_value is not None else nn.Identity()
+        self.use_moe = use_moe
         if is_cross_attention:
             self.ln_1_kv = norm_layer(d_model)
 
         self.ln_2 = norm_layer(d_model)
         mlp_width = int(d_model * mlp_ratio)
-        self.mlp = nn.Sequential(
-            OrderedDict(
-                [
-                    ("c_fc", nn.Linear(d_model, mlp_width)),
-                    ("gelu", act_layer()),
-                    ("c_proj", nn.Linear(mlp_width, d_model)),
-                ]
+        if not use_moe:
+            self.mlp = nn.Sequential(
+                OrderedDict(
+                    [
+                        ("c_fc", nn.Linear(d_model, mlp_width)),
+                        ("gelu", act_layer()),
+                        ("c_proj", nn.Linear(mlp_width, d_model)),
+                    ]
+                )
             )
-        )
-        self.ls_2 = (
-            LayerScale(d_model, ls_init_value)
-            if ls_init_value is not None
-            else nn.Identity()
-        )
+        else:
+            self.mlp = LinearGLUMoELayer(d_model, mlp_width, num_experts, num_selects, gate_use_balance=False)
+        self.ls_2 = LayerScale(d_model, ls_init_value) if ls_init_value is not None else nn.Identity()
 
     def attention(
         self,
@@ -319,15 +342,42 @@ class ResidualAttentionBlock(nn.Module):
         v_x: Optional[torch.Tensor] = None,
         attn_mask: Optional[torch.Tensor] = None,
     ):
-        k_x = (
-            self.ln_1_kv(k_x) if hasattr(self, "ln_1_kv") and k_x is not None else None
-        )
-        v_x = (
-            self.ln_1_kv(v_x) if hasattr(self, "ln_1_kv") and v_x is not None else None
-        )
+        k_x = self.ln_1_kv(k_x) if hasattr(self, "ln_1_kv") and k_x is not None else None
+        v_x = self.ln_1_kv(v_x) if hasattr(self, "ln_1_kv") and v_x is not None else None
 
-        x = q_x + self.ls_1(
-            self.attention(q_x=self.ln_1(q_x), k_x=k_x, v_x=v_x, attn_mask=attn_mask)
-        )
-        x = x + self.ls_2(self.mlp(self.ln_2(x)))
+        x = q_x + self.ls_1(self.attention(q_x=self.ln_1(q_x), k_x=k_x, v_x=v_x, attn_mask=attn_mask))
+
+        if not self.use_moe:
+            x = x + self.ls_2(self.mlp(self.ln_2(x)))
+        else:
+            ln_2 = self.ln_2(x)
+            mlp_out = self.mlp(ln_2)["hidden_states"]
+            x = x + self.ls_2(mlp_out)
+
         return x
+
+
+if __name__ == "__main__":
+    pooler = AttnPooler(
+        272,
+        num_layers=6,
+        num_attention_heads=8,
+        encoder_hidden_size=1152,
+        hidden_size=1152,
+        output_size=4096,
+        norm_layer=LayerNorm,
+        checkpoint=False,
+        split_part=[729, 729, 729],
+        num_patches=[27, 27],
+        use_moe=True,
+        num_experts=4,
+        num_selects=2,
+    )
+
+    ckpt = torch.load("/home/aiscuser/Output/LHRS/Stage1/checkpoints/FINAL.pt", map_location="cpu")
+
+    pooler.load_state_dict(ckpt["other_ckpt"]["rgb_pooler"])
+
+    inputs = torch.randn(1, 729 * 3, 1152)
+    outputs = pooler(inputs)
+    print(outputs.shape)

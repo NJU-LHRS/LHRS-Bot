@@ -164,10 +164,7 @@ class Trainer:
 
     @property
     def model_or_module(self) -> nn.Module:
-        if (
-            isinstance(self.model, (DataParallel, DistributedDataParallel))
-            or self.torch_compile
-        ):
+        if isinstance(self.model, (DataParallel, DistributedDataParallel)) or self.torch_compile:
             return self.model.module
         return self.model
 
@@ -223,9 +220,7 @@ class Trainer:
             self.model.to(self.device)
             if self._is_distributed:
                 self.model = nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
-                self.model = nn.parallel.DistributedDataParallel(
-                    self.model, device_ids=[get_rank()]
-                )
+                self.model = nn.parallel.DistributedDataParallel(self.model, device_ids=[get_rank()])
 
         logger.info("Using %s for training " % self.device)
 
@@ -284,9 +279,7 @@ class Trainer:
             else:
                 data["model"] = self.model_or_module.custom_save_checkpoint(file_name)
 
-        hook_states = {
-            h.class_name: h.state_dict() for h in self._hooks if h.checkpointable
-        }
+        hook_states = {h.class_name: h.state_dict() for h in self._hooks if h.checkpointable}
         if hook_states:
             data["hooks"] = hook_states
 
@@ -331,22 +324,16 @@ class Trainer:
 
             # load model
             if not hasattr(self.model_or_module, "custom_load_state_dict"):
-                incompatible = self.model_or_module.load_state_dict(
-                    checkpoint["model"], strict=False
-                )
+                incompatible = self.model_or_module.load_state_dict(checkpoint["model"], strict=False)
             else:
-                incompatible = self.model_or_module.custom_load_state_dict(
-                    path, strict=False
-                )
+                incompatible = self.model_or_module.custom_load_state_dict(path, strict=False)
             if incompatible is not None and incompatible.missing_keys:
                 logger.warning(
-                    "Encounter missing keys when loading model weights:\n"
-                    f"{incompatible.missing_keys}"
+                    "Encounter missing keys when loading model weights:\n" f"{incompatible.missing_keys}"
                 )
             if incompatible is not None and incompatible.unexpected_keys:
                 logger.warning(
-                    "Encounter unexpected keys when loading model weights:\n"
-                    f"{incompatible.unexpected_keys}"
+                    "Encounter unexpected keys when loading model weights:\n" f"{incompatible.unexpected_keys}"
                 )
 
             # load optimizer
@@ -357,11 +344,11 @@ class Trainer:
         for _ in range(self.cur_stat):
             next(self._data_iter)
 
-        for param_groups in self.optimizer.param_groups:
-            param_groups["lr"] = 0.0001
-
         # load metric_storage
         self.metric_storage = checkpoint["metric_storage"]
+        for name, buffer in self.metric_storage._history.items():
+            if isinstance(buffer._sum, torch.Tensor):
+                buffer._sum = buffer._sum.detach().cpu().item()
 
         # load hooks
         hook_states = checkpoint.get("hooks", {})
@@ -369,13 +356,9 @@ class Trainer:
         missing_keys = [name for name in hook_names if name not in hook_states]
         unexpected_keys = [key for key in hook_states if key not in hook_names]
         if missing_keys:
-            logger.warning(
-                f"Encounter missing keys when loading hook state dict:\n{missing_keys}"
-            )
+            logger.warning(f"Encounter missing keys when loading hook state dict:\n{missing_keys}")
         if unexpected_keys:
-            logger.warning(
-                f"Encounter unexpected keys when loading hook state dict:\n{unexpected_keys}"
-            )
+            logger.warning(f"Encounter unexpected keys when loading hook state dict:\n{unexpected_keys}")
 
         for key, value in hook_states.items():
             for h in self._hooks:
@@ -408,10 +391,7 @@ class Trainer:
             iter_time = np.max([x.pop("iter_time") for x in all_metrics_dict])
             self.log(self.cur_iter, iter_time=iter_time)
 
-            metrics_dict = {
-                k: np.mean([x[k] for x in all_metrics_dict])
-                for k in all_metrics_dict[0].keys()
-            }
+            metrics_dict = {k: np.mean([x[k] for x in all_metrics_dict]) for k in all_metrics_dict[0].keys()}
 
             if "total_loss" in metrics_dict.keys():
                 loss_value = metrics_dict.pop("total_loss")
@@ -453,9 +433,7 @@ class Trainer:
         #####################
         # 2. Calculate loss #
         #####################
-        with torch.autocast(
-            device_type=self.autocast_type, enabled=self._enable_amp, dtype=self.dtype
-        ):
+        with torch.autocast(device_type=self.autocast_type, enabled=self._enable_amp, dtype=self.dtype):
             batch = self.put_input_to_device(batch)
             self.loss_dict = self.model(batch)
 
@@ -492,9 +470,7 @@ class Trainer:
         if isinstance(modal_input, tuple):
             modal_input = tuple([item.to(device=self.device) for item in modal_input])
         elif isinstance(modal_input, Dict):
-            modal_input = {
-                key: item.to(device=self.device) for key, item in modal_input.items()
-            }
+            modal_input = {key: item.to(device=self.device) for key, item in modal_input.items()}
         else:
             modal_input = modal_input.to(self.device)
         return modal_input

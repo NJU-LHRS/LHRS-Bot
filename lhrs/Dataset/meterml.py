@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
+from transformers import BaseImageProcessor
 
 MAX_VALUES_BY_DTYPE = {
     np.dtype("uint8"): 255,
@@ -85,6 +86,9 @@ class METERMLDataset(Dataset):
             img = img.astype(np.float32) / 10000
 
         if self.transform is not None:
-            img = self.transform(img)
+            if isinstance(self.transform, BaseImageProcessor):
+                img = torch.from_numpy(self.transform(img).pixel_values[0])
+            else:
+                img = self.transform(img)
 
         return img, label

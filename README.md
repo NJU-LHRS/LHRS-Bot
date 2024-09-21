@@ -12,13 +12,13 @@
   <a href="#news">News</a> |
   <a href="#introduction">Introduction</a> |
   <a href="#Preparation">Preparation</a> |
-  <a href="#Training">Training</a> |
   <a href="#Demo">Demo</a> | 
   <a href="#acknowledgement">Acknowledgement</a> |
   <a href="#statement">Statement</a>
 </p >
 
 ## News
++ **\[Sep 21 2024\]:** We release the new, strong model **LHRS-Bot-Nova** with enhanced base model, training data, and training recipe. Please checkout to the nova branch [here]() and follow the instruction for using the new model. The model checkpoint can be found at [huggingface](https://huggingface.co/LHRS/LHRS-Bot-Nova/tree/main)
 + **\[Jul 15 2024\]:** We updated our paper at [arxiv](https://arxiv.org/abs/2402.02544).
 + **\[Jul 12 2024\]:** We post the missing part in our paper (some observations, considerations, and lessons) in [Zhihu](https://zhuanlan.zhihu.com/p/708415355) (In Chinese, please contact us if you need English version).
 + **\[Jul 09 2024\]:** We have released our evaluation benchmark [LHRS-Bench](https://huggingface.co/datasets/PumpkinCat/LHRS_Data/tree/main/LHRS-Bench).
@@ -30,18 +30,13 @@
 
 ## Introduction
 
-We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLLM) that leverages globally available volunteer geographic information (VGI) and remote sensing images (RS). LHRS-Bot demonstrates a deep understanding of RS imagery and possesses the capability for sophisticated reasoning within the RS domain. In this repository, we will release our code, training framework, model weights, and dataset!
+We are excited to introduce **LHRS-Bot-Nova**, an enhanced version of LHRS-Bot with LLaMA-3 as base model, MoE bridge layer design, and improved caption and strong vision undetstanding ability. 
 
 <figure>
 <div align="center">
-<img src=assets/performance.png width="50%">
-</div>
-  <div align="center">
-<img src=assets/vis_example.png width="100%">
+<img src=assets/architecture.png width="100%">
 </div>
 </figure>
-
-
 
 
 ## Preparation
@@ -70,13 +65,13 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
 
 ### Checkpoints
 
-+ LLaMA2-7B-Chat
++ LLaMA3-8B-Instruct
 
     + Automaticaly download:
 
         Our framework is designed to automatically download the checkpoint when you initiate training or run a demo. However, there are a few preparatory steps you need to complete:
 
-        1. Request the LLaMA2-7B-Chat models from [Hugging Face](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf/tree/main).
+        1. Request the LLaMA3-8B-Instruct models from [Hugging Face](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct).
 
         2. After your request been processed, login to huggingface using your personal access tokens:
 
@@ -89,7 +84,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
 
     + Mannually download:
 
-        + Download all the files from [HuggingFace](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf).
+        + Download all the files from [HuggingFace](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct).
 
         + Change the following line of each file to your downloaded directory:
 
@@ -115,34 +110,8 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
 
 + LHRS-Bot Checkpoints:
 
-	|                            Staeg1                            |                            Stage2                            |                            Stage3                            |
-	| :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: |
-	| [Baidu Disk](https://pan.baidu.com/s/1CYjUgGSvdchTuGtxUFNkGA?pwd=sgi7), [Google Drive](https://drive.google.com/drive/folders/1LYrKJ_SpsNQEFTuo6N3rc-TLyaWb4d1Y?usp=drive_link) | [Baidu Disk](https://pan.baidu.com/s/1WYCVPqbizowvLyNGWx9mIw?pwd=986f), [Google Drive](https://drive.google.com/drive/folders/1ZPwkxvapEtvPoEdjKfvOe3j0SqpQeAu5?usp=drive_link) | [Baidu Disk](https://pan.baidu.com/s/1n1h_ZImeKTgvoNHjr5bq3Q?pwd=qhqw), [Google Drive](https://drive.google.com/drive/folders/1dzWTE1k935MjMVnfLtTJiIqw7yCj-e3m?usp=drive_link) |
-	
+	+ Download from our [huggingface repo](https://huggingface.co/LHRS/LHRS-Bot-Nova/tree/main)
 	+ ⚠️ Ensure that the `TextLoRA` folder is located in the same directory as `FINAL.pt`. The name `TextLoRA` should remain unchanged. Our framework will automatically detect the version perceiver checkpoint and, if possible, load and merge the LoRA module.
-	
-	+ Development Checkpoint:
-	
-	    We will continually update our model with advanced techniques. If you're interested, feel free to download it and have fun :)
-	    
-	    |                         Development                          |
-	    | :----------------------------------------------------------: |
-	    | [Baidu Disk](https://pan.baidu.com/s/134VYRigS4f9TuMk7ekoZbg?pwd=dxk4), [Google Drive](https://drive.google.com/drive/folders/1UPJXGvFsrt-OSI732AaAzsD_FPNJOBK3?usp=drive_link) |
-
-## Training
-+ Prepare and reformat your data following the instruction from [here](./DataPrepare/README.md).
-+ Stage1
-
-	+ Fill the `OUTPUT_DIR` and `DATA_DIR` of [script1](./Script/train_stage1.sh).
-	+ `cd Script; bash train_stage1.sh`
-
-+ Stage2
-
-	+ Fill the `OUTPUT_DIR` and `DATA_DIR` of [script1](./Script/train_stage2.sh)
-	+ Fill the `MODEL_PATH` for loading the stage1' checkpoint 
-	+ `cd Script; bash train_stage2.sh`
-
-+ Stage3 is same as Stage2 except for different folder and script ([here](./Script/train_stage3.sh)).
 
 ## Demo
 
@@ -165,7 +134,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
        --model-path ${PathToCheckpoint}.pt \             # path to checkpoint end with .pt
        --image-file ${TheImagePathYouWantToChat} \       # path to image file (Only Single Image File is supported)
        --accelerator "gpu" \                             # change if you need ["mps", "cpu", "gpu"]
-       --temperature 0.4 \
+       --temperature 0.85 \
        --max-new-tokens 512
   ~~~
 

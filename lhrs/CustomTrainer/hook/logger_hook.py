@@ -5,9 +5,11 @@ from typing import Dict
 
 import ml_collections
 import torch
-import wandb
 from torch.utils.tensorboard import SummaryWriter
 
+import wandb
+
+from ..utils import is_main_process
 from .hookbase import HookBase
 
 logger = logging.getLogger("train")
@@ -44,11 +46,6 @@ class LoggerHook(HookBase):
         self._config = config
 
     def before_train(self) -> None:
-        if self.wandb:
-            wandb.watch(
-                self.trainer.model_or_module, log="parameters", log_freq=self._period
-            )
-
         self._train_start_time = time.perf_counter()
 
     def after_train(self) -> None:
@@ -68,22 +65,12 @@ class LoggerHook(HookBase):
     def _write_console(self) -> None:
         # These fields ("data_time", "iter_time", "lr", "loss") may does not
         # exist when user overwrites `self.trainer.train_one_iter()`
-        data_time = (
-            self.metric_storage["data_time"].avg
-            if "data_time" in self.metric_storage
-            else None
-        )
-        iter_time = (
-            self.metric_storage["iter_time"].avg
-            if "iter_time" in self.metric_storage
-            else None
-        )
+        data_time = self.metric_storage["data_time"].avg if "data_time" in self.metric_storage else None
+        iter_time = self.metric_storage["iter_time"].avg if "iter_time" in self.metric_storage else None
         lr = self.metric_storage["lr"].latest if "lr" in self.metric_storage else None
 
         if iter_time is not None:
-            eta_seconds = iter_time * (
-                self.trainer.max_iters - self.trainer.cur_iter - 1
-            )
+            eta_seconds = iter_time * (self.trainer.max_iters - self.trainer.cur_iter - 1)
             eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
         else:
             eta_string = None
@@ -100,22 +87,14 @@ class LoggerHook(HookBase):
         ]
 
         if hasattr(self.trainer, "epoch"):
-            process_string = f"Epoch: [{self.trainer.epoch}][{self.trainer.inner_iter}/{self.trainer.epoch_len - 1}]"
-        else:
             process_string = (
-                f"Iter: [{self.trainer.inner_iter}/{self.trainer.max_iters}]"
+                f"Epoch: [{self.trainer.epoch}][{self.trainer.inner_iter}/{self.trainer.epoch_len - 1}]"
             )
+        else:
+            process_string = f"Iter: [{self.trainer.inner_iter}/{self.trainer.max_iters}]"
 
-        tau = (
-            self.metric_storage["tau"].latest
-            if "tau" in self.metric_storage.keys()
-            else None
-        )
-        grad_norm = (
-            self.metric_storage["grad_norm"].latest
-            if "grad_norm" in self.metric_storage.keys()
-            else None
-        )
+        tau = self.metric_storage["tau"].latest if "tau" in self.metric_storage.keys() else None
+        grad_norm = self.metric_storage["grad_norm"].latest if "grad_norm" in self.metric_storage.keys() else None
 
         space = " " * 2
         logger.info(
@@ -123,28 +102,12 @@ class LoggerHook(HookBase):
                 process=process_string,
                 eta=space + f"ETA: {eta_string}" if eta_string is not None else "",
                 losses=space + "  ".join(loss_strings) if loss_strings else "",
-                iter_time=(
-                    space + f"iter_time: {iter_time:.4f}"
-                    if iter_time is not None
-                    else ""
-                ),
-                data_time=(
-                    space + f"data_time: {data_time:.4f}  "
-                    if data_time is not None
-                    else ""
-                ),
+                iter_time=(space + f"iter_time: {iter_time:.4f}" if iter_time is not None else ""),
+                data_time=(space + f"data_time: {data_time:.4f}  " if data_time is not None else ""),
                 lr=space + f"lr: {lr:.5g}" if lr is not None else "",
-                memory=(
-                    space + f"max_mem: {max_mem_mb:.0f}M"
-                    if max_mem_mb is not None
-                    else ""
-                ),
+                memory=(space + f"max_mem: {max_mem_mb:.0f}M" if max_mem_mb is not None else ""),
                 tau=space + f"momentum: {tau:.4f}" if tau is not None else "",
-                grad_norm=(
-                    space + f"grad_norm: {grad_norm: .4f}"
-                    if grad_norm is not None
-                    else ""
-                ),
+                grad_norm=(space + f"grad_norm: {grad_norm: .4f}" if grad_norm is not None else ""),
             )
         )
 
@@ -157,6 +120,6 @@ class LoggerHook(HookBase):
         for key, (iter, value) in self.metric_storage.values_maybe_smooth.items():
             if key not in self._last_write or iter > self._last_write[key]:
                 self._tb_writer.add_scalar(key, value, iter)
-                if self.wandb:
+                if self.wandb and is_main_process():
                     wandb.log({key: value}, iter)
                 self._last_write[key] = iter

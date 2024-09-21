@@ -8,8 +8,6 @@ import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
-import wandb
-
 from lhrs.CustomTrainer import deepspeed_init_distributed
 from lhrs.CustomTrainer.EpochBasedTrainer import EpochBasedTrainer
 from lhrs.CustomTrainer.utils import (
@@ -22,6 +20,8 @@ from lhrs.Dataset.build_loader import build_loader
 from lhrs.models import build_model
 from lhrs.optimizer import build_optimizer
 
+import wandb
+
 logger = logging.getLogger("train")
 
 
@@ -32,7 +32,7 @@ def build_ds_config(config: ml_collections.ConfigDict):
             "type": "AdamW",
             "params": {
                 "lr": config.lr,
-                "eps": 1e-8,
+                "eps": 1e-6,
                 "betas": (0.9, 0.95),
                 "weight_decay": config.wd,
             },
@@ -99,29 +99,21 @@ def parse_option():
     parser.add_argument("--data-path", type=str, help="path to dataset")
     parser.add_argument("--eval-data-path", type=str, help="path to evaluate dataset")
     parser.add_argument("--workers", type=int, default=8, help="workers of dataloader")
-    parser.add_argument(
-        "--auto-resume", action="store_true", help="resume from checkpoint"
-    )
-    parser.add_argument(
-        "--resume-path", type=str, default=None, help="resume checkpoint path"
-    )
+    parser.add_argument("--auto-resume", action="store_true", help="resume from checkpoint")
+    parser.add_argument("--resume-path", type=str, default=None, help="resume checkpoint path")
     parser.add_argument(
         "--model-path",
         type=str,
         default=None,
         help="pretrained checkpoint path for model (maybe stage 1)",
     )
-    parser.add_argument(
-        "--accumulation-steps", type=int, default=1, help="gradient accumulation steps"
-    )
+    parser.add_argument("--accumulation-steps", type=int, default=1, help="gradient accumulation steps")
     parser.add_argument(
         "--use-checkpoint",
         action="store_true",
         help="whether to use gradient checkpointing to save memory",
     )
-    parser.add_argument(
-        "--enable-amp", type=str2bool, default=False, help="mixed precision"
-    )
+    parser.add_argument("--enable-amp", type=str2bool, default=False, help="mixed precision")
     parser.add_argument(
         "--output",
         default="output",
@@ -147,15 +139,9 @@ def parse_option():
     # wandb
     parser.add_argument("--wandb", type=str2bool, default=False, help="wandb logger")
     parser.add_argument("--entity", type=str, default="pumpkinn", help="wandb entity")
-    parser.add_argument(
-        "--project", type=str, default="MultiModal", help="wandb project"
-    )
-    parser.add_argument(
-        "--job-type", type=str, default="vlm_test", help="wandb job_type"
-    )
-    parser.add_argument(
-        "--tags", type=str, default="MultiModal", nargs="+", help="wandb tags"
-    )
+    parser.add_argument("--project", type=str, default="MultiModal", help="wandb project")
+    parser.add_argument("--job-type", type=str, default="vlm_test", help="wandb job_type")
+    parser.add_argument("--groups", type=str, default="MultiModal", help="wandb group")
     parser.add_argument("--name", type=str, default="first_run", help="wandb run name")
     parser.add_argument("--notes", type=str, default=None, help="wandb run's notes")
 
@@ -191,11 +177,7 @@ def main(config):
         prompt_type=config.prompt_template,
     )
 
-    compute_dtype = (
-        torch.float16
-        if config.fp16
-        else (torch.bfloat16 if config.bf16 else torch.float32)
-    )
+    compute_dtype = torch.float16 if config.fp16 else (torch.bfloat16 if config.bf16 else torch.float32)
     model.prepare_for_training(
         freeze_vision=not config.tune_rgb_bk,
         freeze_text=not config.lora.enable,
@@ -206,17 +188,34 @@ def main(config):
     )
 
     if config.optimizer.lower() == "adamw":
-        parameter = None
         optimizer = None
     else:
-        parameter = None
         optimizer = build_optimizer(model, config, is_pretrain=True)
+
+    small_lr_group = ["rgb."]
+    regular_lr_group = ["rgb_pooler."]
+
+    small_lr = []
+    regular_lr = []
+
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if any([group in name for group in small_lr_group]):
+            small_lr.append(param)
+        elif any([group in name for group in regular_lr_group]):
+            regular_lr.append(param)
+
+    params = [
+        {"params": small_lr, "lr": config.lr / 10},
+        {"params": regular_lr},
+    ]
 
     model_engine, optimizer, _, _ = deepspeed.initialize(
         config=build_ds_config(config),
         model=model,
         optimizer=optimizer if optimizer is not None else None,
-        model_parameters=parameter if parameter is not None else None,
+        model_parameters=params,
     )
 
     trainer = EpochBasedTrainer(
@@ -245,22 +244,16 @@ def main(config):
         resume_file = auto_resume_helper(config.output)
         if resume_file:
             if config.resume_path is not None:
-                logger.warning(
-                    f"auto-resume changing resume file from {config.resume_path} to {resume_file}"
-                )
+                logger.warning(f"auto-resume changing resume file from {config.resume_path} to {resume_file}")
             config.resume_path = resume_file
             logger.info(f"auto resuming from {resume_file}")
         else:
-            logger.info(
-                f"no checkpoint found in {config.output}/checkpoint, ignoring auto resume"
-            )
+            logger.info(f"no checkpoint found in {config.output}/checkpoint, ignoring auto resume")
 
     trainer.train(load_checkpoint=config.resume_path)
 
     if config.local_rank == 0 or config.local_rank == -1:
-        state_dict = model.custom_save_checkpoint(
-            os.path.join(config.output, "checkpoints")
-        )
+        state_dict = model.custom_save_checkpoint(os.path.join(config.output, "checkpoints"))
         torch.save(
             state_dict,
             os.path.join(os.path.join(config.output, "checkpoints"), "FINAL.pt"),
@@ -301,8 +294,8 @@ if __name__ == "__main__":
             entity=config.entity,
             project=config.project,
             job_type=config.job_type,
-            tags=config.tags,
             name=config.name,
+            group=config.groups,
         )
         config = ml_collections.config_dict.ConfigDict(wandb.config)
 

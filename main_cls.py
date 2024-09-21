@@ -25,7 +25,9 @@ from lhrs.models import (
 from lhrs.utils import type_dict
 from sklearn.metrics import balanced_accuracy_score, classification_report
 from tqdm import tqdm
+import PIL
 
+PIL.Image.MAX_IMAGE_PIXELS = 933120000
 logger = logging.getLogger("train")
 
 
@@ -161,7 +163,6 @@ def main(config: ml_collections.ConfigDict):
     inp = CLS_TEMPLATE[0](all_classes)
 
     conv = default_conversation.copy()
-    roles = conv.roles
 
     if config.tune_im_start:
         inp = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + "\n" + inp

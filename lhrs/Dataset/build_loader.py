@@ -185,7 +185,6 @@ def build_zero_shot_loader(
             )
         else:
             dataset = ImageFolderInstance(
-                dataset_name=config.eval.dataset,
                 return_index=False,
                 root=config.data_path,
                 transform=transform,

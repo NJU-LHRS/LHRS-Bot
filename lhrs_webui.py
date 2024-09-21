@@ -12,9 +12,6 @@ import torch
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as T
 import transformers
-from PIL import Image
-from transformers import StoppingCriteriaList, TextIteratorStreamer
-
 from lhrs.CustomTrainer.utils import ConfigArgumentParser
 from lhrs.Dataset.build_transform import build_vlp_transform
 from lhrs.Dataset.conversation import default_conversation
@@ -25,17 +22,18 @@ from lhrs.models import (
     tokenizer_image_token,
 )
 from lhrs.utils import StoppingCriteriaSub, type_dict
+from PIL import Image
+from transformers import StoppingCriteriaList, TextIteratorStreamer
 
 title = """<h1 align="center">LHRS-Bot🛰</h1>"""
 description = """<h1 align="center">Welcome to Online LHRS-Bot Demo!</h1>"""
 images_desc = """<p align="center"><img src="https://pumpkintypora.oss-cn-shanghai.aliyuncs.com/lhrsbot.png" style="height: 80px"/><p>"""
 introduction = """
 Using Instruction:
-1. Visual Grounding: Input a description about the referring object (then choose [VG]) and CLICK **Send**.
+1. Visual Grounding: Input a description about the referring object (then choose [DET]) and CLICK **Send**.
 2. Classification: Input the given categories (then choose [CLS]), and CLICK **Send**.
-3. VQA: Input a visual question (then choose [VQA]) and CLICK **Send**.
+3. VQA: Input a visual question (then choose [CONSIZE]) and CLICK **Send**.
 4. No Tag: Input whatever you want and CLICK **Send** without any tagging
-5. Identify: Input a bounding box (then choose [Identify]) and CLICK **Send**.
 
 You can also simply chat in free form!
 """
@@ -48,9 +46,7 @@ def _get_args():
         type=str,
         help="Checkpoint name or path, default to %(default)r",
     )
-    parser.add_argument(
-        "--cpu-only", action="store_true", help="Run demo with CPU only"
-    )
+    parser.add_argument("--cpu-only", action="store_true", help="Run demo with CPU only")
     parser.add_argument(
         "--share",
         action="store_true",
@@ -63,12 +59,8 @@ def _get_args():
         default=False,
         help="Automatically launch the interface in a new tab on the default browser.",
     )
-    parser.add_argument(
-        "--server-port", type=int, default=8000, help="Demo server port."
-    )
-    parser.add_argument(
-        "--server-name", type=str, default="127.0.0.1", help="Demo server name."
-    )
+    parser.add_argument("--server-port", type=int, default=8000, help="Demo server port.")
+    parser.add_argument("--server-name", type=str, default="127.0.0.1", help="Demo server name.")
 
     args = parser.parse_args()
     args = ml_collections.config_dict.ConfigDict(args)
@@ -88,9 +80,7 @@ def _load_model_tokenizer(config: ml_collections.ConfigDict):
     if config.checkpoint_path is not None:
         if getattr(config, "hf_model", False):
             msg = model.custom_load_state_dict(config.checkpoint_path, strict=False)
-            tokenizer = transformers.AutoTokenizer.from_pretrained(
-                config.path, use_fast=False
-            )
+            tokenizer = transformers.AutoTokenizer.from_pretrained(config.path, use_fast=False)
         else:
             if hasattr(model, "custom_load_state_dict"):
                 msg = model.custom_load_state_dict(config.checkpoint_path)
@@ -144,19 +134,17 @@ class WebUIDemo(object):
 
         self.device = device
 
-        if getattr(config, "hf_model", False):
-            self.vis_processor = self.model.get_image_processor()
-        else:
-            self.vis_processor = build_vlp_transform(config, is_train=False)
+        self.vis_processor = build_vlp_transform(config, is_train=False)
 
         self.dtype = type_dict[config.dtype]
 
         if stopping_criteria is not None:
             self.stopping_criteria = stopping_criteria
         else:
-            stop_words_ids = [torch.tensor([2]).to(self.device)]
+            stop_words_ids = tokenizer.convert_tokens_to_ids(["<|eot_id|>"])
+            stop_words_ids = torch.tensor(stop_words_ids).to(device)
             self.stopping_criteria = StoppingCriteriaList(
-                [StoppingCriteriaSub(stops=stop_words_ids)]
+                [StoppingCriteriaSub(stops=[stop_words_ids], encounters=1)]
             )
 
     def ask(self, text, conv):
@@ -185,9 +173,7 @@ class WebUIDemo(object):
         conv.append_message(conv.roles[1], None)
         prompt = conv.get_prompt()
         input_ids = (
-            tokenizer_image_token(
-                prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt"
-            )
+            tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt")
             .unsqueeze(0)
             .to(self.device)
         )
@@ -221,11 +207,9 @@ class WebUIDemo(object):
     def answer(self, conv, img_list, **kargs):
         generation_dict = self.answer_prepare(conv, img_list, **kargs)
         output_token = self.model_generate(**generation_dict)[0]
-        output_text = self.tokenizer.decode(
-            output_token, skip_special_tokens=True
-        ).strip()
+        output_text = self.tokenizer.decode(output_token, skip_special_tokens=True).strip()
 
-        output_text = output_text.split("<s>")[-1].stip()
+        output_text = output_text.split("<|eot_id|>")[0].stip()
 
         conv.messages[-1][1] = output_text
         return output_text, output_token.cpu().numpy()
@@ -253,34 +237,10 @@ class WebUIDemo(object):
         img_list.pop(0)
         if isinstance(image, str):  # is a image path
             raw_image = Image.open(image).convert("RGB")
-            if self.config.rgb_vision.arch.startswith("vit"):
-                image = (
-                    self.vis_processor(image, return_tensors="pt")
-                    .pixel_values.to(self.device)
-                    .to(self.dtype)
-                )
-            else:
-                image = (
-                    self.vis_processor(image)
-                    .to(self.dtype)
-                    .to(self.device)
-                    .unsqueeze(0)
-                )
+            image = self.vis_processor(image, return_tensors="pt").pixel_values.to(self.device).to(self.dtype)
         elif isinstance(image, Image.Image):
             raw_image = image
-            if self.config.rgb_vision.arch.startswith("vit"):
-                image = (
-                    self.vis_processor(raw_image, return_tensors="pt")
-                    .pixel_values.to(self.device)
-                    .to(self.dtype)
-                )
-            else:
-                image = (
-                    self.vis_processor(raw_image)
-                    .to(self.dtype)
-                    .to(self.device)
-                    .unsqueeze(0)
-                )
+            image = self.vis_processor(raw_image, return_tensors="pt").pixel_values.to(self.device).to(self.dtype)
         elif isinstance(image, torch.Tensor):
             if len(image.shape) == 3:
                 image = image.unsqueeze(0)
@@ -315,7 +275,7 @@ class WebUIDemo(object):
                     temperature = gr.Slider(
                         minimum=0.1,
                         maximum=1.5,
-                        value=0.4,
+                        value=0.8,
                         step=0.1,
                         interactive=True,
                         label="Temperature",
@@ -334,10 +294,9 @@ class WebUIDemo(object):
                         components=[gr.Textbox(visible=False)],
                         samples=[
                             ["No Tag"],
-                            ["[VG]"],
+                            ["[DET]"],
                             ["[CLS]"],
-                            ["[VQA]"],
-                            ["[Identify]"],
+                            ["[CONSIZE]"],
                         ],
                         type="index",
                         label="Task Shortcuts",
@@ -465,17 +424,15 @@ class WebUIDemo(object):
     def gradio_taskselect(self, idx):
         prompt_list = [
             "",
-            "[VG]",
+            "[DET]",
             "[CLS] ",
-            "[VQA] ",
-            "[Identify] ",
+            "[CONSIZE] ",
         ]
         instruct_list = [
             "**Hint:** Type in whatever you want",
             "**Hint:** Send the command to generate bounding boxes",
             "**Hint:** Type in given categories, and see the classification results",
             "**Hint:** Type in a your question, and see the answer",
-            "**Hint:** Type in a bounding box, and see the object",
         ]
         return prompt_list[idx], instruct_list[idx]
 
@@ -499,12 +456,6 @@ class WebUIDemo(object):
         else:
             mask = None
 
-        if "[Identify]" in user_message:
-            integers = re.findall(r"-?\d+", user_message)
-            if len(integers) != 4:
-                bbox = mask2bbox(mask)
-                user_message = user_message + bbox
-
         if chat_state is None:
             chat_state = default_conversation.copy()
 
@@ -521,12 +472,6 @@ class WebUIDemo(object):
 
         chatbot = chatbot + [[user_message, None]]
 
-        if "[Identify]" in user_message:
-            visual_img, _ = visualize_all_bbox_together(gr_img, user_message)
-            if visual_img is not None:
-                file_path = save_tmp_img(visual_img)
-                chatbot = chatbot + [[(file_path,), None]]
-
         return text_box_show, chatbot, chat_state, img_list, upload_flag, replace_flag
 
     def gradio_stream_answer(self, chatbot, chat_state, img_list, temperature):
@@ -538,7 +483,7 @@ class WebUIDemo(object):
             img_list=img_list,
             temperature=temperature,
             max_new_tokens=500,
-            max_length=2000,
+            max_length=2048,
         )
         output = ""
         for new_output in streamer:
@@ -565,15 +510,15 @@ class WebUIDemo(object):
 
 
 def extract_substrings(string):
-    # first check if there is no-finished bracket
-    index = string.rfind("}")
-    if index != -1:
-        string = string[: index + 1]
+    bbox_pattern = re.compile(r"<bbox>\[(.*?)\]</bbox>")
+    matches = bbox_pattern.findall(string)
 
-    pattern = r"\[([0-9., ]+)\]"
-    matches = re.findall(pattern, string)
-    pred_result = [list(map(float, match.split(","))) for match in matches if match]
-    return pred_result
+    bounding_boxes = []
+    for match in matches:
+        bbox = [float(value) for value in match.split(",")]
+        bounding_boxes.append(bbox)
+
+    return bounding_boxes
 
 
 def is_overlapping(rect1, rect2):
@@ -604,26 +549,6 @@ def save_tmp_img(visual_img):
     file_path = "/tmp/gradio" + file_name
     visual_img.save(file_path)
     return file_path
-
-
-def mask2bbox(mask):
-    if mask is None:
-        return ""
-    mask = mask.resize([100, 100], resample=Image.NEAREST)
-    mask = np.array(mask)[:, :, 0]
-
-    rows = np.any(mask, axis=1)
-    cols = np.any(mask, axis=0)
-
-    if rows.sum():
-        # Get the top, bottom, left, and right boundaries
-        rmin, rmax = np.where(rows)[0][[0, -1]]
-        cmin, cmax = np.where(cols)[0][[0, -1]]
-        bbox = "{{<{}><{}><{}><{}>}}".format(cmin, rmin, cmax, rmax)
-    else:
-        bbox = ""
-
-    return bbox
 
 
 colors = [
@@ -726,12 +651,8 @@ def visualize_all_bbox_together(image, generation):
             raise ValueError(f"invaild image path, {image}")
     elif isinstance(image, torch.Tensor):
         image_tensor = image.cpu()
-        reverse_norm_mean = torch.tensor([0.48145466, 0.4578275, 0.40821073])[
-            :, None, None
-        ]
-        reverse_norm_std = torch.tensor([0.26862954, 0.26130258, 0.27577711])[
-            :, None, None
-        ]
+        reverse_norm_mean = torch.tensor([0.48145466, 0.4578275, 0.40821073])[:, None, None]
+        reverse_norm_std = torch.tensor([0.26862954, 0.26130258, 0.27577711])[:, None, None]
         image_tensor = image_tensor * reverse_norm_std + reverse_norm_mean
         pil_img = T.ToPILImage()(image_tensor)
         image_h = pil_img.height
@@ -745,19 +666,14 @@ def visualize_all_bbox_together(image, generation):
     new_image = image.copy()
 
     previous_bboxes = []
-    # size of text
     text_size = 0.5
-    # thickness of text
     text_line = 1  # int(max(1 * min(image_h, image_w) / 512, 1))
     box_line = 2
-    (c_width, text_height), _ = cv2.getTextSize(
-        "F", cv2.FONT_HERSHEY_COMPLEX, text_size, text_line
-    )
+    (c_width, text_height), _ = cv2.getTextSize("F", cv2.FONT_HERSHEY_COMPLEX, text_size, text_line)
     base_height = int(text_height * 0.675)
     text_offset_original = text_height - base_height
     text_spaces = 2
 
-    # num_bboxes = sum(len(x[-1]) for x in entities)
     used_colors = colors  # random.sample(colors, k=num_bboxes)
 
     color_id = -1
@@ -777,12 +693,8 @@ def visualize_all_bbox_together(image, generation):
                 int(y2_norm),
             )
 
-            color = used_colors[
-                entity_idx % len(used_colors)
-            ]  # tuple(np.random.randint(0, 255, size=3).tolist())
-            new_image = cv2.rectangle(
-                new_image, (orig_x1, orig_y1), (orig_x2, orig_y2), color, box_line
-            )
+            color = used_colors[entity_idx % len(used_colors)]  # tuple(np.random.randint(0, 255, size=3).tolist())
+            new_image = cv2.rectangle(new_image, (orig_x1, orig_y1), (orig_x2, orig_y2), color, box_line)
 
             if mode == "all":
                 l_o, r_o = (
@@ -794,13 +706,7 @@ def visualize_all_bbox_together(image, generation):
                 y1 = orig_y1 - l_o
 
                 if y1 < text_height + text_offset_original + 2 * text_spaces:
-                    y1 = (
-                        orig_y1
-                        + r_o
-                        + text_height
-                        + text_offset_original
-                        + 2 * text_spaces
-                    )
+                    y1 = orig_y1 + r_o + text_height + text_offset_original + 2 * text_spaces
                     x1 = orig_x1 + r_o
 
                 # add text background
@@ -829,21 +735,14 @@ def visualize_all_bbox_together(image, generation):
                         (text_bg_x1, text_bg_y1, text_bg_x2, text_bg_y2),
                         prev_bbox["bbox"],
                     ):
-                        text_bg_y1 += (
-                            text_height + text_offset_original + 2 * text_spaces
-                        )
-                        text_bg_y2 += (
-                            text_height + text_offset_original + 2 * text_spaces
-                        )
+                        text_bg_y1 += text_height + text_offset_original + 2 * text_spaces
+                        text_bg_y2 += text_height + text_offset_original + 2 * text_spaces
                         y1 += text_height + text_offset_original + 2 * text_spaces
 
                         if text_bg_y2 >= image_h:
                             text_bg_y1 = max(
                                 0,
-                                image_h
-                                - (
-                                    text_height + text_offset_original + 2 * text_spaces
-                                ),
+                                image_h - (text_height + text_offset_original + 2 * text_spaces),
                             )
                             text_bg_y2 = image_h
                             y1 = image_h
@@ -860,8 +759,7 @@ def visualize_all_bbox_together(image, generation):
                                     # white
                                     bg_color = [255, 255, 255]
                                 new_image[i, j] = (
-                                    alpha * new_image[i, j]
-                                    + (1 - alpha) * np.array(bg_color)
+                                    alpha * new_image[i, j] + (1 - alpha) * np.array(bg_color)
                                 ).astype(np.uint8)
 
                     cv2.putText(
@@ -897,8 +795,7 @@ def visualize_all_bbox_together(image, generation):
             color = next(color_gen)
             return f'<span style="color:rgb{color}">{phrase}</span>'
 
-        # generation = re.sub(r"\[([0-9., ]+)\]", "", generation)
-        generation_colored = re.sub(r"\[([0-9., ]+)\]", colored_phrases, generation)
+        generation_colored = re.sub(r"<bbox>\[(.*?)\]</bbox>", colored_phrases, generation)
     else:
         generation_colored = ""
 

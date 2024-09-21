@@ -22,9 +22,7 @@ MODAL_MAPPING = {"rgb": VisionModal, "text": TextModal}
 
 
 class UniBind(nn.Module):
-    def __init__(
-        self, activate_modal: Tuple[str, str], config: ml_collections.ConfigDict
-    ):
+    def __init__(self, activate_modal: Tuple[str, str], config: ml_collections.ConfigDict):
         assert len(activate_modal) > 0, "activate_modal should not be empty"
         for name in activate_modal:
             assert name in MODAL_MAPPING.keys(), f"Modal {name} is not supported"
@@ -33,9 +31,7 @@ class UniBind(nn.Module):
         self.stage = config.stage
 
         if config.adjust_norm:
-            norm_layer = (
-                LayerNormFp32 if config.dtype in ("float16", "bfloat16") else LayerNorm
-            )
+            norm_layer = LayerNormFp32 if config.dtype in ("float16", "bfloat16") else LayerNorm
         else:
             norm_layer = LayerNorm
 
@@ -47,23 +43,24 @@ class UniBind(nn.Module):
                     num_query=config.rgb_vision.attn_pooler.num_query,
                     num_layers=config.rgb_vision.attn_pooler.num_layers,
                     num_attention_heads=config.rgb_vision.attn_pooler.num_attn_heads,
-                    encoder_hidden_size=VisionModal.EMBEDDING_DIM[
-                        config.rgb_vision.arch
-                    ],
+                    encoder_hidden_size=VisionModal.EMBEDDING_DIM[config.rgb_vision.arch],
                     hidden_size=VisionModal.EMBEDDING_DIM[config.rgb_vision.arch],
                     output_size=config.text.hidden_size,
                     norm_layer=norm_layer,
                     checkpoint=getattr(config, "use_checkpoint", False),
+                    split_part=[
+                        (self.rgb.get_config().image_size // self.rgb.get_config().patch_size) ** 2,
+                        (self.rgb.get_config().image_size // self.rgb.get_config().patch_size) ** 2,
+                        (self.rgb.get_config().image_size // self.rgb.get_config().patch_size) ** 2,
+                    ],
+                    num_patches=[
+                        self.rgb.get_config().image_size // self.rgb.get_config().patch_size,
+                        self.rgb.get_config().image_size // self.rgb.get_config().patch_size,
+                    ],
+                    use_moe=getattr(config.rgb_vision.attn_pooler, "use_moe", False),
+                    num_experts=getattr(config.rgb_vision.attn_pooler, "num_experts", 1),
+                    num_selects=getattr(config.rgb_vision.attn_pooler, "num_selects", 1),
                 )
-
-    def load_rgb_encoder(self, path: str):
-        assert hasattr(self, "rgb"), "rgb modal is not activated"
-        ckpt = torch.load(path, map_location="cpu")
-        if "model" in ckpt:
-            ckpt = ckpt["model"]
-
-        msg = self.rgb.encoder.load_state_dict(ckpt, strict=False)
-        logger.info(f"Loading RGB Model: {msg}")
 
     def custom_save_checkpoint(self, file_name: str):
         fp32_ckpt = get_fp32_state_dict_from_zero_checkpoint(file_name)
@@ -94,9 +91,7 @@ class UniBind(nn.Module):
 
         logger.info(f"Loading RGB encoder.")
         msg = self.rgb.load_state_dict(ckpt["rgb_ckpt"], strict=strict)
-        logger.info(
-            f"After loading RGB encoder: Missing: {msg.missing_keys}. Unexpected: {msg.unexpected_keys}"
-        )
+        logger.info(f"After loading RGB encoder: Missing: {msg.missing_keys}. Unexpected: {msg.unexpected_keys}")
 
         other_ckpt = ckpt["other_ckpt"]
         self.rgb_pooler.load_state_dict(other_ckpt["rgb_pooler"])
@@ -108,7 +103,7 @@ class UniBind(nn.Module):
                 self.text.text_encoder,
                 text_path,
                 is_trainable=self.stage > 2,
-                torch_dtype=torch.float16,
+                torch_dtype=torch.bfloat16,
             )
 
             if self.stage == 0:  # Eval
@@ -144,12 +139,6 @@ class UniBind(nn.Module):
 
             for p in self.text.get_text_encoder().get_output_embeddings().parameters():
                 p.requires_grad = False
-        else:
-            for p in self.text.get_text_encoder().get_input_embeddings().parameters():
-                p.requires_grad = False
-
-            for p in self.text.get_text_encoder().get_output_embeddings().parameters():
-                p.requires_grad = False
 
         if hasattr(self, "rgb_pooler"):
             for param in self.rgb_pooler.parameters():
@@ -161,15 +150,11 @@ class UniBind(nn.Module):
 
         if tune_im_start:
             if freeze_text:
-                for p in (
-                    self.text.get_text_encoder().get_input_embeddings().parameters()
-                ):
+                for p in self.text.get_text_encoder().get_input_embeddings().parameters():
                     p.requires_grad = True
 
-                for p in (
-                    self.text.get_text_encoder().get_output_embeddings().parameters()
-                ):
-                    p.requires_grad = False
+                for p in self.text.get_text_encoder().get_output_embeddings().parameters():
+                    p.requires_grad = True
 
         if model_path is not None:
             msg = self.custom_load_state_dict(model_path)
@@ -241,19 +226,6 @@ class UniBind(nn.Module):
             **kwargs,
         )
 
-    def convert_weight_to_dtype(self, dtype: torch.dtype, modal: str = "rgb"):
-        assert (
-            modal in MODAL_MAPPING.keys()
-        ), f"modal should be one of {MODAL_MAPPING.keys()}"
-        assert hasattr(self, modal), f"{modal} modal is not activated"
-        modality = getattr(self, modal)
-
-        if hasattr(self, "text" + "_attn_pooling"):
-            pooler = getattr(self, "text" + "_attn_pooling")
-
-        modality.to(dtype)
-        pooler.to(dtype)
-
 
 def maybe_zero_3(param, ignore_status=False, name=None):
     from deepspeed import zero
@@ -262,9 +234,7 @@ def maybe_zero_3(param, ignore_status=False, name=None):
     if hasattr(param, "ds_id"):
         if param.ds_status == ZeroParamStatus.NOT_AVAILABLE:
             if not ignore_status:
-                logger.warning(
-                    f"{name}: param.ds_status != ZeroParamStatus.NOT_AVAILABLE: {param.ds_status}"
-                )
+                logger.warning(f"{name}: param.ds_status != ZeroParamStatus.NOT_AVAILABLE: {param.ds_status}")
         with zero.GatheredParameters([param]):
             param = param.data.detach().cpu().clone()
     else:
@@ -273,7 +243,7 @@ def maybe_zero_3(param, ignore_status=False, name=None):
 
 
 def get_other_maybe_zero_3(named_params):
-    names = ["rgb_pooler", "embed_tokens"]
+    names = ["rgb_pooler"]
     rgb_pooler = dict()
     text_proj = dict()
     embed_tokens = dict()
@@ -296,7 +266,5 @@ def get_other_maybe_zero_3(named_params):
 
 def get_rgb_maybe_zero_3(named_params):
     to_return = {k[len("rgb.") :]: t for k, t in named_params if "rgb." in k}
-    to_return = {
-        k: maybe_zero_3(v, ignore_status=True).cpu() for k, v in to_return.items()
-    }
+    to_return = {k: maybe_zero_3(v, ignore_status=True).cpu() for k, v in to_return.items()}
     return to_return

@@ -9,7 +9,7 @@ import torch
 import torchvision.transforms as T
 import transformers
 from PIL import Image
-from transformers import CLIPImageProcessor
+from transformers import BaseImageProcessor
 
 from . import conversation as conversation_lib
 from .cap_dataset import preprocess, preprocess_multimodal
@@ -87,9 +87,7 @@ class RSVQA(torch.utils.data.Dataset):
     ):
         assert split in self.splits
         prompt_type = kwargs.pop("prompt_type", "llava_llama_2")
-        conversation_lib.default_conversation = conversation_lib.conv_templates[
-            prompt_type
-        ]
+        conversation_lib.default_conversation = conversation_lib.conv_templates[prompt_type]
 
         self.root = root
         self.split = split
@@ -134,9 +132,7 @@ class RSVQA(torch.utils.data.Dataset):
         for id in self.ids:
             questions_ids = self.images[id]["questions_ids"]
             valid_questions_ids = [
-                i
-                for i in questions_ids
-                if self.questions[i]["type"].lower() not in neglect_question_type
+                i for i in questions_ids if self.questions[i]["type"].lower() not in neglect_question_type
             ]
             new_questions.extend(valid_questions_ids)
             new_ids.extend([id] * len(valid_questions_ids))
@@ -156,7 +152,7 @@ class RSVQA(torch.utils.data.Dataset):
         """
         id = self.ids[idx]
         x = np.array(Image.open(os.path.join(self.image_root, f"{id}.tif")))
-        if isinstance(self.image_transform, CLIPImageProcessor):
+        if isinstance(self.image_transform, BaseImageProcessor):
             x = self.image_transform(x, return_tensors="pt").pixel_values.squeeze()
         else:
             x = self.image_transform(x)
@@ -164,6 +160,9 @@ class RSVQA(torch.utils.data.Dataset):
         answers = self.answers[questions["answers_ids"][0]]["answer"]
         types = questions["type"]
         questions = questions["question"]
+        if "?" not in questions:
+            questions += "?"
+        questions += " Answer in a single word. Answer:"
         questions = self.text_transform(questions)
         answers = self.text_transform(answers)
 
@@ -226,14 +225,11 @@ class DataCollatorForVQASupervisedDataset(object):
             :return: A new tuple with padded sequences.
             """
             padded_sequences = tuple(
-                [padding_value] * (desired_length - len(seq)) + list(seq)
-                for seq in sequences
+                [padding_value] * (desired_length - len(seq)) + list(seq) for seq in sequences
             )
             return padded_sequences
 
-        input_ids = left_pad_sequences(
-            input_ids, max_length, self.tokenizer.pad_token_id
-        )
+        input_ids = left_pad_sequences(input_ids, max_length, self.tokenizer.pad_token_id)
         input_ids = torch.tensor(input_ids)
         input_ids = input_ids[:, : self.tokenizer.model_max_length]
         attention_mask = input_ids.ne(self.tokenizer.pad_token_id)
