@@ -18,7 +18,7 @@
 </p >
 
 ## News
-+ **\[Sep 21 2024\]:** We release the new, strong model **LHRS-Bot-Nova** with enhanced base model, training data, and training recipe. Please checkout to the nova branch [here]() and follow the instruction for using the new model. The model checkpoint can be found at [huggingface](https://huggingface.co/LHRS/LHRS-Bot-Nova/tree/main)
++ **\[Sep 21 2024\]:** We are excited to release **LHRS-Bot-Nova**, a powerful new model with an upgraded base model, enriched training data, and an improved training recipe. Please check out the nova branch [here](https://github.com/NJU-LHRS/LHRS-Bot/tree/nova) and follow the instructions to start using the model. The model checkpoint is available on [huggingface](https://huggingface.co/LHRS/LHRS-Bot-Nova/tree/main).
 + **\[Jul 15 2024\]:** We updated our paper at [arxiv](https://arxiv.org/abs/2402.02544).
 + **\[Jul 12 2024\]:** We post the missing part in our paper (some observations, considerations, and lessons) in [Zhihu](https://zhuanlan.zhihu.com/p/708415355) (In Chinese, please contact us if you need English version).
 + **\[Jul 09 2024\]:** We have released our evaluation benchmark [LHRS-Bench](https://huggingface.co/datasets/PumpkinCat/LHRS_Data/tree/main/LHRS-Bench).
@@ -48,6 +48,7 @@ We are excited to introduce **LHRS-Bot-Nova**, an enhanced version of LHRS-Bot w
     ~~~shell
     git clone git@github.com:NJU-LHRS/LHRS-Bot.git
     cd LHRS-Bot
+	git checkout nova
     ~~~
 
 2. Create a new virtual enviroment
