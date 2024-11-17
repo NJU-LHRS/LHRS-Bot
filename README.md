@@ -56,7 +56,7 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
     cd LHRS-Bot
     ~~~
 
-2. Create a new virtual enviroment
+2. Create a new virtual environment
 
     ~~~shell
     conda create -n lhrs python=3.10
