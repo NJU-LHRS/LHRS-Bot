@@ -232,11 +232,22 @@ We are excited to introduce **LHRS-Bot**, a multimodal large language model (MLL
 + If you find our work is useful, please give us 🌟 in GitHub and consider cite our paper:
 
     ~~~tex
-    @misc{2402.02544,
-    Author = {Dilxat Muhtar and Zhenshi Li and Feng Gu and Xueliang Zhang and Pengfeng Xiao},
-    Title = {LHRS-Bot: Empowering Remote Sensing with VGI-Enhanced Large Multimodal Language Model},
-    Year = {2024},
-    Eprint = {arXiv:2402.02544},
+    @InProceedings{10.1007/978-3-031-72904-1_26,
+    author="Muhtar, Dilxat and Li, Zhenshi and Gu, Feng and Zhang, Xueliang and Xiao, Pengfeng",
+    title="LHRS-Bot: Empowering Remote Sensing with VGI-Enhanced Large Multimodal Language Model",
+    booktitle="Computer Vision -- ECCV 2024",
+    year="2025",
+    publisher="Springer Nature Switzerland",
+    address="Cham",
+    pages="440--457",
+    isbn="978-3-031-72904-1"
+    }
+
+    @article{li2024lhrs,
+    title={LHRS-Bot-Nova: Improved Multimodal Large Language Model for Remote Sensing Vision-Language Interpretation},
+    author={Li, Zhenshi and Muhtar, Dilxat and Gu, Feng and Zhang, Xueliang and Xiao, Pengfeng and He, Guangjun and Zhu, Xiaoxiang},
+    journal={arXiv preprint arXiv:2411.09301},
+    year={2024}
     }
     ~~~
 
