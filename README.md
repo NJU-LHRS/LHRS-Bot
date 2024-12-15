@@ -211,6 +211,13 @@ We are excited to introduce **LHRS-Bot-Nova**, an enhanced version of LHRS-Bot w
     pages="440--457",
     isbn="978-3-031-72904-1"
     }
+
+    @article{li2024lhrs,
+    title={LHRS-Bot-Nova: Improved Multimodal Large Language Model for Remote Sensing Vision-Language Interpretation},
+    author={Li, Zhenshi and Muhtar, Dilxat and Gu, Feng and Zhang, Xueliang and Xiao, Pengfeng and He, Guangjun and Zhu, Xiaoxiang},
+    journal={arXiv preprint arXiv:2411.09301},
+    year={2024}
+    }
     ~~~
 
 + Licence: Apache
