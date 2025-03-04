@@ -19,6 +19,7 @@
 </p >
 
 ## News
++ **\[Mar 04 2025\]:** 🎉🎉🎉🎉🎉 Our new, more powerful model and parameter-wise vision language data scoring model are also released!!! Please checkout this [repo](https://github.com/NJU-LHRS/ScoreRS) for more information!
 + **\[Sep 21 2024\]:** 🎉🎉🎉🎉🎉 We are excited to release **LHRS-Bot-Nova**, a powerful new model with an upgraded base model, enriched training data, and an improved training recipe. Please check out the nova branch [here](https://github.com/NJU-LHRS/LHRS-Bot/tree/nova) and follow the instructions to start using the model. The model checkpoint is available on [huggingface](https://huggingface.co/LHRS/LHRS-Bot-Nova/tree/main).
 + **\[Jul 15 2024\]:** We updated our paper at [arxiv](https://arxiv.org/abs/2402.02544).
 + **\[Jul 12 2024\]:** We post the missing part in our paper (some observations, considerations, and lessons) in [Zhihu](https://zhuanlan.zhihu.com/p/708415355) (In Chinese, please contact us if you need English version).
